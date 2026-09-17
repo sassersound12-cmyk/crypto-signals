@@ -1,0 +1,9 @@
+# Dependencies
+node_modules/
+
+# Runtime-generated access codes — never commit real codes.
+data/codes.json
+
+# Logs / misc
+*.log
+.DS_Store
