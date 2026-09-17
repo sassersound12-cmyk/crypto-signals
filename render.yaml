@@ -1,0 +1,15 @@
+# Render Blueprint — deploys Crypto Signals as a free web service.
+# In the Render dashboard: New → Blueprint → point at the repo containing this file.
+services:
+  - type: web
+    name: crypto-signals
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: ACCESS_CODES
+        sync: false # Set in the Render dashboard: comma-separated buyer codes, e.g. "AB12-CD34,EF56-GH78"
