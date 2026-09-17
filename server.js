@@ -30,6 +30,7 @@ import { buildSignals } from "./lib/signals.js";
 import { detectPatterns } from "./lib/patterns.js";
 import { getNews } from "./lib/news.js";
 import { verifyCode } from "./lib/codes.js";
+import { claimCodeForSession } from "./lib/claim.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -229,6 +230,23 @@ app.post("/api/verify", verifyRateLimit, (req, res) => {
     return badRequest(res, "Request body must be JSON with a non-empty `code` string.");
   }
   res.json({ valid: verifyCode(code) });
+});
+
+// Post-checkout code claim: verifies the Stripe session server-side, then
+// issues (idempotently) the buyer's personal access code.
+app.get("/api/claim", verifyRateLimit, async (req, res) => {
+  try {
+    const { code } = await claimCodeForSession(req.query.session_id);
+    res.json({ code });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || "Could not issue an access code." });
+  }
+});
+
+// Thank-you page buyers land on after Stripe checkout.
+app.get("/welcome", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "welcome.html"));
 });
 
 // Unknown /api routes -> JSON 404 (keeps the frontend's fetch() happy).
