@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Crypto Signals — Rule-based market observations</title>
+<meta name="description" content="Crypto Signals: rule-based technical observations, pattern overlays, rainbow cycles, EMA ribbon and simulated paper trading. Not financial advice.">
+<meta name="theme-color" content="#0a0e14">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ ACCESS GATE ============ -->
+<div id="gate" class="gate" hidden>
+  <div class="gate-card">
+    <div class="gate-logo"><img src="icons/icon-192.png" alt="Crypto Signals logo" width="64" height="64"></div>
+    <h1>Crypto Signals</h1>
+    <p class="gate-sub">Enter your access code to unlock the terminal.</p>
+    <form id="gate-form" autocomplete="off">
+      <input id="gate-code" type="text" inputmode="text" placeholder="Access code" aria-label="Access code" spellcheck="false">
+      <button type="submit" class="btn btn-primary">Unlock</button>
+    </form>
+    <p id="gate-error" class="gate-error" role="alert" hidden>Invalid code — please try again.</p>
+    <p class="gate-hint">I just purchased — check your email for your access code.</p>
+    <p class="gate-buy">New here? <a href="https://muse.ai/s/crypto-signals-3-xrg5z2xt9ztwxh" target="_blank" rel="noopener">Get Crypto Signals</a></p>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" hidden>
+
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon-192.png" alt="" width="28" height="28">
+      <span>Crypto <em>Signals</em></span>
+    </div>
+    <nav class="symbol-pills" id="symbol-pills" aria-label="Symbol selector"></nav>
+    <div class="topbar-actions">
+      <button id="install-btn" class="btn btn-ghost" hidden>Install app</button>
+    </div>
+  </header>
+
+  <!-- dismissible disclosure banner -->
+  <div id="disclosure-banner" class="disclosure-banner" hidden>
+    <p>⚠️ <strong>Not financial advice.</strong> Crypto is volatile; signals are rule-based observations, not predictions. Never invest money you can’t afford to lose.</p>
+    <button id="disclosure-dismiss" class="btn btn-ghost btn-sm" aria-label="Dismiss disclosure">Got it</button>
+  </div>
+
+  <nav class="section-nav" aria-label="Sections">
+    <a href="#dashboard">Dashboard</a>
+    <a href="#signals">Signals</a>
+    <a href="#patterns">Patterns</a>
+    <a href="#tv-section">Chart</a>
+    <a href="#rainbow">Rainbow</a>
+    <a href="#ribbon">EMA Ribbon</a>
+    <a href="#paper">Paper Trade</a>
+    <a href="#news">News</a>
+  </nav>
+
+  <main class="wrap">
+
+    <!-- DASHBOARD -->
+    <section id="dashboard" class="card">
+      <div class="card-head">
+        <h2>Dashboard</h2>
+        <button id="refresh-btn" class="btn btn-ghost btn-sm">⟳ Refresh</button>
+      </div>
+      <div class="price-row">
+        <div>
+          <div class="sym-name" id="dash-symbol">BTC</div>
+          <div class="price mono" id="dash-price">—</div>
+        </div>
+        <div class="price-side">
+          <span class="chg-pill mono" id="dash-change">—</span>
+          <span class="updated" id="dash-updated">—</span>
+        </div>
+      </div>
+      <div class="ticker-grid" id="ticker-grid"></div>
+    </section>
+
+    <!-- SIGNALS -->
+    <section id="signals" class="card">
+      <div class="card-head">
+        <h2>Signals</h2>
+        <span class="tag tag-rule">Rule-based signals (not predictions)</span>
+      </div>
+      <div id="regime-banner" class="regime-banner">Loading market regime…</div>
+      <div class="sig-meta-grid">
+        <div class="rsi-box">
+          <h3>RSI (14)</h3>
+          <div class="rsi-value mono" id="rsi-value">—</div>
+          <div class="rsi-track"><div class="rsi-fill" id="rsi-fill"></div>
+            <div class="rsi-zone overbought"></div><div class="rsi-zone oversold"></div>
+          </div>
+          <div class="rsi-state" id="rsi-state">—</div>
+        </div>
+        <div class="sr-box">
+          <h3>Key levels</h3>
+          <div class="sr-row"><span>Resistance</span><strong class="mono" id="sr-res">—</strong></div>
+          <div class="sr-row"><span>Support</span><strong class="mono" id="sr-sup">—</strong></div>
+          <div class="sr-row"><span>Current</span><strong class="mono" id="sr-cur">—</strong></div>
+        </div>
+      </div>
+      <h3 class="sub-h">Latest signals</h3>
+      <div id="signal-list" class="signal-list"></div>
+    </section>
+
+    <!-- PATTERNS -->
+    <section id="patterns" class="card">
+      <div class="card-head"><h2>Pattern overlays</h2></div>
+      <canvas id="pattern-chart" class="chart" height="320" aria-label="Candlestick chart with pattern overlays"></canvas>
+      <div id="pattern-cards" class="pattern-cards"></div>
+    </section>
+
+    <!-- TRADINGVIEW -->
+    <section id="tv-section" class="card">
+      <div class="card-head"><h2>Live chart</h2></div>
+      <div id="tv-widget" class="tv-wrap"></div>
+    </section>
+
+    <!-- RAINBOW -->
+    <section id="rainbow" class="card">
+      <div class="card-head">
+        <h2>BTC rainbow chart</h2>
+        <div class="chart-controls">
+          <button class="btn btn-ghost btn-sm range-btn" data-range="30">30D</button>
+          <button class="btn btn-ghost btn-sm range-btn" data-range="365">1Y</button>
+          <button class="btn btn-ghost btn-sm range-btn active" data-range="all">ALL</button>
+          <button id="rainbow-reset" class="btn btn-ghost btn-sm">Reset zoom</button>
+        </div>
+      </div>
+      <p class="chart-note">Log-scale bands around a long-term trend fit. Drag to pan · scroll / pinch to zoom. Bands describe distance from trend — they are not buy/sell instructions.</p>
+      <canvas id="rainbow-chart" class="chart" height="380" aria-label="Bitcoin rainbow cycle chart"></canvas>
+      <div id="rainbow-legend" class="legend"></div>
+    </section>
+
+    <!-- EMA RIBBON -->
+    <section id="ribbon" class="card">
+      <div class="card-head"><h2>EMA ribbon</h2></div>
+      <p class="chart-note">EMAs 8 · 13 · 21 · 34 · 55 · 89. <span class="dot green"></span> price crossed above ribbon (buy zone) · <span class="dot red"></span> crossed below (sell zone). Zone flips are observations, not advice.</p>
+      <canvas id="ribbon-chart" class="chart" height="340" aria-label="EMA ribbon chart"></canvas>
+      <div class="legend"><span class="lg"><i style="background:#00e676"></i>fast EMA 8</span><span class="lg"><i style="background:#3d5afe"></i>slow EMA 89</span><span class="lg"><span class="dot green"></span>buy-zone flip</span><span class="lg"><span class="dot red"></span>sell-zone flip</span></div>
+    </section>
+
+    <!-- PAPER TRADING -->
+    <section id="paper" class="card">
+      <div class="card-head">
+        <h2>Paper trading</h2>
+        <span class="tag tag-sim">SIMULATED — virtual money only, no real orders</span>
+      </div>
+      <div class="paper-stats">
+        <div class="stat"><span>Cash</span><strong class="mono" id="paper-cash">—</strong></div>
+        <div class="stat"><span>Open P&amp;L</span><strong class="mono" id="paper-openpnl">—</strong></div>
+        <div class="stat"><span>Equity</span><strong class="mono" id="paper-equity">—</strong></div>
+      </div>
+      <form id="paper-form" class="paper-form">
+        <div class="seg" role="group" aria-label="Direction">
+          <button type="button" class="seg-btn active" data-side="LONG">LONG</button>
+          <button type="button" class="seg-btn" data-side="SHORT">SHORT</button>
+        </div>
+        <input id="paper-size" type="number" min="1" step="any" placeholder="Size (USD)" aria-label="Position size in USD" required>
+        <button type="submit" class="btn btn-primary">Open position @ <span id="paper-at" class="mono">—</span></button>
+      </form>
+      <h3 class="sub-h">Open positions</h3>
+      <div id="paper-positions" class="positions"></div>
+      <h3 class="sub-h">Trade history</h3>
+      <div id="paper-history" class="history"></div>
+      <button id="paper-reset" class="btn btn-ghost btn-sm">Reset paper account ($10,000)</button>
+    </section>
+
+    <!-- NEWS -->
+    <section id="news" class="card">
+      <div class="card-head"><h2>Market news</h2><span class="updated" id="news-updated"></span></div>
+      <div id="news-list" class="news-list"></div>
+    </section>
+
+    <footer class="footer">
+      <p><strong>Disclosure:</strong> This app is for education and entertainment. <strong>Not financial advice.</strong> Crypto assets are highly volatile — you can lose money quickly. Signals and charts here are rule-based technical observations of past price action, <strong>not predictions</strong> and never guaranteed, certain, or accurate forecasts. Do your own research and never invest money you can’t afford to lose.</p>
+      <p class="foot-small">Paper trading is fully simulated with virtual money — no real orders are ever placed.</p>
+    </footer>
+
+  </main>
+</div>
+
+<!-- PWA install help (also reachable from topbar button) -->
+<div id="install-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h2>Install Crypto Signals</h2>
+    <button id="install-now" class="btn btn-primary" hidden>Install app</button>
+    <div class="install-steps">
+      <h3>Chrome on Android</h3><p>Menu <strong>⋮</strong> → <strong>Install app</strong> (or <strong>Add to Home screen</strong>).</p>
+      <h3>Safari on iPhone/iPad</h3><p>Share <strong>⎙</strong> → <strong>Add to Home Screen</strong>.</p>
+      <h3>Desktop Chrome / Edge</h3><p>Click the install icon <strong>⤓</strong> in the address bar, or menu → <strong>Install Crypto Signals…</strong>.</p>
+    </div>
+    <button id="install-close" class="btn btn-ghost">Close</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
