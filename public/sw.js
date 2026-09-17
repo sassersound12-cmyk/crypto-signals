@@ -33,6 +33,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   // Only cache same-origin shell assets; never cache /api/* or third-party embeds.
   if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/')) return;
 
   event.respondWith(
     caches.match(request).then((hit) => {
