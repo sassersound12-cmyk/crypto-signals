@@ -432,6 +432,7 @@ const RB_BANDS = [
   { c: '#7c4dff', lo: -0.76, hi: -1.00, name: 'Basically a fire sale' },
 ];
 const rb = { candles: [], fit: null, view: [0, 0], range: 'all' };
+let rbGen = 0; // loadRainbow generation guard against overlapping loads
 
 let rainbowWired = false;
 async function initRainbow() {
@@ -454,18 +455,23 @@ async function loadRainbow(sym) {
   const { ctx, w, h } = fitCanvas(canvas);
   const title = $('rainbow-title');
   if (title) title.textContent = sym + ' rainbow chart';
+  // Generation guard: rapid symbol taps must not let an older fetch
+  // draw over (or leave stale data under) a newer one.
+  const gen = ++rbGen;
   rb.candles = []; rb.fit = null; rb.view = [0, 0]; rb.range = 'all';
   ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
   ctx.fillText('Loading ' + sym + ' history…', 20, 40);
   try {
     // up to 10 chunks × ~300 daily candles ≈ up to ~8 years of history
     const candles = await fetchCandles(apiSym(sym), 86400, 10);
+    if (gen !== rbGen) return; // superseded by a newer load
     if (candles.length < 30) throw new Error('not enough history');
     rb.candles = candles;
     rb.fit = logFit(candles);
     rb.view = [0, candles.length];
     drawRainbow();
   } catch (err) {
+    if (gen !== rbGen) return;
     ctx.fillStyle = '#8b98ab';
     ctx.fillText('Could not load long-term ' + sym + ' history.', 20, 40);
   }
