@@ -39,6 +39,14 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(express.json({ limit: "10kb" }));
 
 // Frontend (built by a separate agent) is served from ./public when present.
+// sw.js must never be served stale: browsers check it on each navigation to
+// discover service-worker updates (e.g. v2 -> v3 after a fix ships).
+app.use((req, res, next) => {
+  if (req.path === "/sw.js" || req.path === "/service-worker.js") {
+    res.set("Cache-Control", "no-cache");
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---------------------------------------------------------------------------
