@@ -292,11 +292,15 @@ async function refreshPatterns() {
     // detected on, so startIndex/endIndex overlay without misalignment.
     const pat = await fetchJson('/api/patterns?symbol=' + encodeURIComponent(apiSym(state.symbol)));
     const candles = pat.candles || [];
-    drawPatternChart(ctx, w, h, candles, pat.patterns || []);
+    // Re-fit after the fetch: an overlapping refresh may have drawn since,
+    // which would otherwise leave doubled-up gridlines and labels.
+    const f = fitCanvas(canvas);
+    drawPatternChart(f.ctx, f.w, f.h, candles, pat.patterns || []);
     renderPatternCards(pat.patterns || [], pat.note);
   } catch (err) {
-    ctx.fillStyle = '#8b98ab';
-    ctx.fillText('Could not load chart data.', 20, 40);
+    const f = fitCanvas(canvas);
+    f.ctx.fillStyle = '#8b98ab'; f.ctx.font = '13px sans-serif';
+    f.ctx.fillText('Could not load chart data.', 20, 40);
   }
 }
 function drawPatternChart(ctx, w, h, candles, patterns) {
@@ -648,10 +652,13 @@ async function initRibbon() {
   try {
     const candles = await fetchCandles(apiSym(state.symbol), 3600, 2);
     if (!candles.length) throw new Error('no candles');
-    drawRibbon(ctx, w, h, candles.slice(-240));
+    // Re-fit after the fetch: an overlapping refresh may have drawn since.
+    const f = fitCanvas(canvas);
+    drawRibbon(f.ctx, f.w, f.h, candles.slice(-240));
   } catch (err) {
-    ctx.fillStyle = '#8b98ab';
-    ctx.fillText('Could not load EMA data.', 20, 40);
+    const f = fitCanvas(canvas);
+    f.ctx.fillStyle = '#8b98ab'; f.ctx.font = '13px sans-serif';
+    f.ctx.fillText('Could not load EMA data.', 20, 40);
   }
 }
 function refreshRibbon() { initRibbon(); }
