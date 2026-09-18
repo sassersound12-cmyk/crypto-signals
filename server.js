@@ -204,6 +204,10 @@ app.get("/api/patterns", async (req, res) => {
     const patterns = detectPatterns(candleData.candles);
     const payload = {
       symbol,
+      granularity,
+      // The exact candle window the patterns were detected on, so the
+      // frontend can overlay startIndex/endIndex without misalignment.
+      candles: candleData.candles,
       patterns,
       note: patterns.length
         ? `${patterns.length} pattern${patterns.length === 1 ? "" : "s"} detected in recent price action. Patterns describe past structure, not future results.`
