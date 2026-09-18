@@ -256,13 +256,14 @@ function renderSignalCards(signals) {
 }
 
 /* ---------- candle fetching (with history stitching) ---------- */
-async function fetchCandles(symbol, granularity, maxChunks) {
+async function fetchCandles(symbol, granularity, maxChunks, chunkLimit) {
   maxChunks = maxChunks || 1;
+  chunkLimit = Math.min(Math.max(chunkLimit || 200, 1), 1000); // server clamps limit to 1..1000
   const out = [];
   const seen = new Set();
   let end; // epoch seconds; ask for candles at/before this
   for (let i = 0; i < maxChunks; i++) {
-    const q = new URLSearchParams({ symbol, granularity: String(granularity) });
+    const q = new URLSearchParams({ symbol, granularity: String(granularity), limit: String(chunkLimit) });
     if (end !== undefined) q.set('end', String(Math.floor(end)));
     let data;
     try { data = await fetchJson('/api/candles?' + q.toString()); }
@@ -274,7 +275,7 @@ async function fetchCandles(symbol, granularity, maxChunks) {
     const oldest = cs[0].time;
     if (end !== undefined && oldest >= end) break; // server ignored `end`; avoid duplicates loop
     end = oldest - granularity;
-    if (cs.length < 250) break; // likely reached the start of history
+    if (cs.length < chunkLimit) break; // short chunk: reached the start of history
   }
   out.sort((a, b) => a.time - b.time);
   return out;
@@ -462,8 +463,9 @@ async function loadRainbow(sym) {
   ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
   ctx.fillText('Loading ' + sym + ' history…', 20, 40);
   try {
-    // up to 10 chunks × ~300 daily candles ≈ up to ~8 years of history
-    const candles = await fetchCandles(apiSym(sym), 86400, 10);
+    // Single request for up to 1000 daily candles (~2.7 years); the server
+    // stitches Coinbase's 300-candle pages internally.
+    const candles = await fetchCandles(apiSym(sym), 86400, 1, 1000);
     if (gen !== rbGen) return; // superseded by a newer load
     if (candles.length < 30) throw new Error('not enough history');
     rb.candles = candles;
