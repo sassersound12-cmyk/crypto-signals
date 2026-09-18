@@ -138,6 +138,7 @@ function setSymbol(s) {
   refreshDashboard();
   refreshSignals();
   refreshPatterns();
+  loadRainbow(s);
   loadTradingView();
   renderPaperForm();
 }
@@ -287,11 +288,11 @@ async function refreshPatterns() {
   ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
   ctx.fillText('Loading candles…', 20, 40);
   try {
-    const [candles, pat] = await Promise.all([
-      fetchCandles(apiSym(state.symbol), 3600, 1),
-      fetchJson('/api/patterns?symbol=' + encodeURIComponent(apiSym(state.symbol))).catch(() => ({ patterns: [] })),
-    ]);
-    drawPatternChart(ctx, w, h, candles.slice(-160), pat.patterns || []);
+    // The endpoint returns the exact candle window the patterns were
+    // detected on, so startIndex/endIndex overlay without misalignment.
+    const pat = await fetchJson('/api/patterns?symbol=' + encodeURIComponent(apiSym(state.symbol)));
+    const candles = pat.candles || [];
+    drawPatternChart(ctx, w, h, candles, pat.patterns || []);
     renderPatternCards(pat.patterns || [], pat.note);
   } catch (err) {
     ctx.fillStyle = '#8b98ab';
@@ -328,6 +329,7 @@ function drawPatternChart(ctx, w, h, candles, patterns) {
     ctx.fillRect(x - bw / 2, Math.min(yO, yC), bw, Math.max(1.5, Math.abs(yC - yO)));
   });
   // pattern overlays: labels + trigger/invalidation/target lines
+  // (numeric levels come from p.levels; trigger/invalidation are descriptive text)
   patterns.forEach((p, pi) => {
     const n = candles.length;
     const s = Math.max(0, Math.min(n - 1, p.startIndex | 0));
@@ -336,11 +338,11 @@ function drawPatternChart(ctx, w, h, candles, patterns) {
     ctx.save();
     ctx.fillStyle = 'rgba(255,179,0,.08)';
     ctx.fillRect(x0, PC.top, x1 - x0, ph);
-    const lines = [
-      { v: p.trigger, col: '#00e676', tag: 'trigger' },
-      { v: p.invalidation, col: '#ff5252', tag: 'invalidation' },
-      { v: p.target, col: '#3d5afe', tag: 'target' },
-    ];
+    const lines = [];
+    const lv = p.levels || {};
+    (Array.isArray(lv.trigger) ? lv.trigger : []).forEach((v) => lines.push({ v, col: '#00e676', tag: 'trigger' }));
+    (Array.isArray(lv.invalidation) ? lv.invalidation : []).forEach((v) => lines.push({ v, col: '#ff5252', tag: 'invalidation' }));
+    if (isFinite(lv.target)) lines.push({ v: lv.target, col: '#3d5afe', tag: 'target' });
     ctx.font = '11px sans-serif';
     lines.forEach((L) => {
       if (!isFinite(L.v)) return;
@@ -372,8 +374,8 @@ function renderPatternCards(patterns, note) {
     d.innerHTML = '<h3>' + esc(p.name || p.label || 'Pattern') + '</h3>' +
       '<div class="pc-row"><span>Confidence</span><strong>' + esc(fmtNum(p.confidence, 0)) + '%</strong></div>' +
       '<div class="pc-row"><span>Detected</span><strong>' + esc(p.detectedAt ? fmtDate(msOf(p.detectedAt)) : '—') + '</strong></div>' +
-      '<div class="pc-row"><span>Trigger</span><strong>' + fmtPrice(p.trigger) + '</strong></div>' +
-      '<div class="pc-row"><span>Invalidation</span><strong>' + fmtPrice(p.invalidation) + '</strong></div>' +
+      '<div class="pc-row"><span>Trigger</span><strong>' + esc(p.trigger || '—') + '</strong></div>' +
+      '<div class="pc-row"><span>Invalidation</span><strong>' + esc(p.invalidation || '—') + '</strong></div>' +
       '<div class="pc-row"><span>Measured target</span><strong>' + fmtPrice(p.target) + '</strong></div>';
     el.appendChild(d);
   });
@@ -427,31 +429,41 @@ const RB_BANDS = [
 ];
 const rb = { candles: [], fit: null, view: [0, 0], range: 'all' };
 
+let rainbowWired = false;
 async function initRainbow() {
+  if (rainbowWired) return;
+  rainbowWired = true;
+  const canvas = $('rainbow-chart');
+  attachRainbowGestures(canvas);
+  renderRainbowLegend();
+  document.querySelectorAll('.range-btn').forEach((b) =>
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.range-btn').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+      setRainbowRange(b.dataset.range);
+    }));
+  $('rainbow-reset').addEventListener('click', () => setRainbowRange('all'));
+  await loadRainbow(state.symbol);
+}
+async function loadRainbow(sym) {
   const canvas = $('rainbow-chart');
   const { ctx, w, h } = fitCanvas(canvas);
+  const title = $('rainbow-title');
+  if (title) title.textContent = sym + ' rainbow chart';
+  rb.candles = []; rb.fit = null; rb.view = [0, 0]; rb.range = 'all';
   ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
-  ctx.fillText('Loading BTC history…', 20, 40);
+  ctx.fillText('Loading ' + sym + ' history…', 20, 40);
   try {
     // up to 10 chunks × ~300 daily candles ≈ up to ~8 years of history
-    const candles = await fetchCandles('BTC-USD', 86400, 10);
+    const candles = await fetchCandles(apiSym(sym), 86400, 10);
     if (candles.length < 30) throw new Error('not enough history');
     rb.candles = candles;
     rb.fit = logFit(candles);
     rb.view = [0, candles.length];
-    attachRainbowGestures(canvas);
     drawRainbow();
-    renderRainbowLegend();
-    document.querySelectorAll('.range-btn').forEach((b) =>
-      b.addEventListener('click', () => {
-        document.querySelectorAll('.range-btn').forEach((x) => x.classList.remove('active'));
-        b.classList.add('active');
-        setRainbowRange(b.dataset.range);
-      }));
-    $('rainbow-reset').addEventListener('click', () => setRainbowRange('all'));
   } catch (err) {
     ctx.fillStyle = '#8b98ab';
-    ctx.fillText('Could not load long-term BTC history.', 20, 40);
+    ctx.fillText('Could not load long-term ' + sym + ' history.', 20, 40);
   }
 }
 function logFit(candles) {
