@@ -16,9 +16,11 @@
    ===================================================================== */
 
 /* ---------- 1. Config & helpers ---------- */
-const SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'LINK'];
+const SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'LINK', 'FLR', 'XLM', 'HBAR', 'SHX'];
 const apiSym = (s) => s + '-USD';
-const tvSym = (s) => 'COINBASE:' + s + 'USD';
+// TradingView exchange overrides for symbols not on Coinbase.
+const TV_EXCHANGE = { SHX: 'KRAKEN:SHXUSD' };
+const tvSym = (s) => TV_EXCHANGE[s] || ('COINBASE:' + s + 'USD');
 const LS_UNLOCKED = 'cs_unlocked';
 const LS_PAPER = 'cs_paper';
 const LS_DISCLOSURE = 'cs_disclosure';
