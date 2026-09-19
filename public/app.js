@@ -927,9 +927,82 @@ function initSW() {
 }
 
 let booted = false;
+/* ---------- collapsible window panels ---------- */
+const PANEL_KEY = 'cs_panels';
+function loadPanelState() {
+  try { return JSON.parse(localStorage.getItem(PANEL_KEY) || '{}'); } catch (e) { return {}; }
+}
+function savePanelState(st) {
+  try { localStorage.setItem(PANEL_KEY, JSON.stringify(st)); } catch (e) {}
+}
+function redrawPanel(id) {
+  // Charts drawn while collapsed measure 0px; re-render after expanding.
+  if (id === 'patterns') refreshPatterns();
+  else if (id === 'rainbow') { if (rb.candles.length) drawRainbow(); }
+  else if (id === 'ribbon') initRibbon();
+}
+function setPanelCollapsed(sec, collapsed, st) {
+  const was = sec.classList.contains('collapsed');
+  sec.classList.toggle('collapsed', collapsed);
+  st[sec.id] = collapsed;
+  savePanelState(st);
+  if (was && !collapsed) redrawPanel(sec.id);
+  syncCollapseAllBtn(st);
+}
+function syncCollapseAllBtn(st) {
+  const btn = $('collapse-all');
+  if (!btn) return;
+  const secs = [...document.querySelectorAll('main.wrap section.card')];
+  const anyOpen = secs.some((s) => !s.classList.contains('collapsed'));
+  btn.textContent = anyOpen ? 'Collapse all' : 'Expand all';
+}
+function initPanels() {
+  const st = loadPanelState();
+  const secs = [...document.querySelectorAll('main.wrap section.card')];
+  secs.forEach((sec) => {
+    if (st[sec.id]) sec.classList.add('collapsed');
+    const head = sec.querySelector('.card-head');
+    if (!head) return;
+    head.setAttribute('role', 'button');
+    head.setAttribute('tabindex', '0');
+    head.setAttribute('aria-expanded', String(!sec.classList.contains('collapsed')));
+    const toggle = (e) => {
+      if (e.target.closest('button, a, input, select, textarea')) return; // let controls work
+      setPanelCollapsed(sec, !sec.classList.contains('collapsed'), st);
+      head.setAttribute('aria-expanded', String(!sec.classList.contains('collapsed')));
+    };
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e); }
+    });
+  });
+  const btn = $('collapse-all');
+  if (btn) btn.addEventListener('click', () => {
+    const anyOpen = secs.some((s) => !s.classList.contains('collapsed'));
+    secs.forEach((sec) => {
+      const head = sec.querySelector('.card-head');
+      setPanelCollapsed(sec, anyOpen, st);
+      if (head) head.setAttribute('aria-expanded', String(!anyOpen));
+    });
+  });
+  // Jumping to a collapsed section from the nav expands it first.
+  document.querySelectorAll('.section-nav a[href^="#"]').forEach((a) => {
+    a.addEventListener('click', () => {
+      const sec = document.getElementById(a.getAttribute('href').slice(1));
+      if (sec && sec.classList.contains('collapsed')) {
+        const head = sec.querySelector('.card-head');
+        setPanelCollapsed(sec, false, st);
+        if (head) head.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+  syncCollapseAllBtn(st);
+}
+
 function bootApp() {
   if (booted) return;
   booted = true;
+  initPanels();
   renderPills();
   renderPaperForm();
   refreshPrices();
