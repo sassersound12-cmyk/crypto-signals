@@ -58,16 +58,16 @@
     <a href="#ribbon">EMA Ribbon</a>
     <a href="#paper">Paper Trade</a>
     <a href="#news">News</a>
+    <span class="panel-controls"><button id="collapse-all" class="btn btn-ghost btn-sm" type="button">Collapse all</button></span>
   </nav>
 
   <main class="wrap">
 
     <!-- DASHBOARD -->
-    <section id="dashboard" class="card">
-      <div class="card-head">
+    <section id="dashboard" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span>
         <h2>Dashboard</h2>
         <button id="refresh-btn" class="btn btn-ghost btn-sm">⟳ Refresh</button>
-      </div>
+      </div><div class="card-body">
       <div class="price-row">
         <div>
           <div class="sym-name" id="dash-symbol">BTC</div>
@@ -79,14 +79,13 @@
         </div>
       </div>
       <div class="ticker-grid" id="ticker-grid"></div>
-    </section>
+    </div></section>
 
     <!-- SIGNALS -->
-    <section id="signals" class="card">
-      <div class="card-head">
+    <section id="signals" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span>
         <h2>Signals</h2>
         <span class="tag tag-rule">Rule-based signals (not predictions)</span>
-      </div>
+      </div><div class="card-body">
       <div id="regime-banner" class="regime-banner">Loading market regime…</div>
       <div class="sig-meta-grid">
         <div class="rsi-box">
@@ -106,24 +105,21 @@
       </div>
       <h3 class="sub-h">Latest signals</h3>
       <div id="signal-list" class="signal-list"></div>
-    </section>
+    </div></section>
 
     <!-- PATTERNS -->
-    <section id="patterns" class="card">
-      <div class="card-head"><h2>Pattern overlays</h2></div>
+    <section id="patterns" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span><h2>Pattern overlays</h2></div><div class="card-body">
       <canvas id="pattern-chart" class="chart" height="320" aria-label="Candlestick chart with pattern overlays"></canvas>
       <div id="pattern-cards" class="pattern-cards"></div>
-    </section>
+    </div></section>
 
     <!-- TRADINGVIEW -->
-    <section id="tv-section" class="card">
-      <div class="card-head"><h2>Live chart</h2></div>
+    <section id="tv-section" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span><h2>Live chart</h2></div><div class="card-body">
       <div id="tv-widget" class="tv-wrap"></div>
-    </section>
+    </div></section>
 
     <!-- RAINBOW -->
-    <section id="rainbow" class="card">
-      <div class="card-head">
+    <section id="rainbow" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span>
         <h2 id="rainbow-title">Rainbow chart</h2>
         <div class="chart-controls">
           <button class="btn btn-ghost btn-sm range-btn" data-range="30">30D</button>
@@ -131,26 +127,24 @@
           <button class="btn btn-ghost btn-sm range-btn active" data-range="all">ALL</button>
           <button id="rainbow-reset" class="btn btn-ghost btn-sm">Reset zoom</button>
         </div>
-      </div>
+      </div><div class="card-body">
       <p class="chart-note">Log-scale bands around a long-term trend fit. Drag to pan · scroll / pinch to zoom. Bands describe distance from trend — they are not buy/sell instructions.</p>
       <canvas id="rainbow-chart" class="chart" height="380" aria-label="Rainbow cycle chart"></canvas>
       <div id="rainbow-legend" class="legend"></div>
-    </section>
+    </div></section>
 
     <!-- EMA RIBBON -->
-    <section id="ribbon" class="card">
-      <div class="card-head"><h2>EMA ribbon</h2></div>
+    <section id="ribbon" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span><h2>EMA ribbon</h2></div><div class="card-body">
       <p class="chart-note">EMAs 8 · 13 · 21 · 34 · 55 · 89. <span class="dot green"></span> price crossed above ribbon (buy zone) · <span class="dot red"></span> crossed below (sell zone). Zone flips are observations, not advice.</p>
       <canvas id="ribbon-chart" class="chart" height="340" aria-label="EMA ribbon chart"></canvas>
       <div class="legend"><span class="lg"><i style="background:#00e676"></i>fast EMA 8</span><span class="lg"><i style="background:#3d5afe"></i>slow EMA 89</span><span class="lg"><span class="dot green"></span>buy-zone flip</span><span class="lg"><span class="dot red"></span>sell-zone flip</span></div>
-    </section>
+    </div></section>
 
     <!-- PAPER TRADING -->
-    <section id="paper" class="card">
-      <div class="card-head">
+    <section id="paper" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span>
         <h2>Paper trading</h2>
         <span class="tag tag-sim">SIMULATED — virtual money only, no real orders</span>
-      </div>
+      </div><div class="card-body">
       <div class="paper-stats">
         <div class="stat"><span>Cash</span><strong class="mono" id="paper-cash">—</strong></div>
         <div class="stat"><span>Open P&amp;L</span><strong class="mono" id="paper-openpnl">—</strong></div>
@@ -169,13 +163,12 @@
       <h3 class="sub-h">Trade history</h3>
       <div id="paper-history" class="history"></div>
       <button id="paper-reset" class="btn btn-ghost btn-sm">Reset paper account ($10,000)</button>
-    </section>
+    </div></section>
 
     <!-- NEWS -->
-    <section id="news" class="card">
-      <div class="card-head"><h2>Market news</h2><span class="updated" id="news-updated"></span></div>
+    <section id="news" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span><h2>Market news</h2><span class="updated" id="news-updated"></span></div><div class="card-body">
       <div id="news-list" class="news-list"></div>
-    </section>
+    </div></section>
 
     <footer class="footer">
       <p><strong>Disclosure:</strong> This app is for education and entertainment. <strong>Not financial advice.</strong> Crypto assets are highly volatile — you can lose money quickly. Signals and charts here are rule-based technical observations of past price action, <strong>not predictions</strong> and never guaranteed, certain, or accurate forecasts. Do your own research and never invest money you can’t afford to lose.</p>
