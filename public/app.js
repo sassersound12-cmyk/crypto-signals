@@ -121,22 +121,48 @@ $('disclosure-dismiss').addEventListener('click', () => {
   $('disclosure-banner').hidden = true;
 });
 
-/* ---------- 3. Symbols & dashboard ---------- */
-function renderPills() {
-  const nav = $('symbol-pills');
-  nav.innerHTML = '';
+/* ---------- 3. Coins & dashboard ---------- */
+const COIN_META = {
+  BTC:  { name: 'Bitcoin',   color: '#f7931a' },
+  ETH:  { name: 'Ethereum',  color: '#627eea' },
+  SOL:  { name: 'Solana',    color: '#9945ff' },
+  XRP:  { name: 'XRP',       color: '#25a9e0' },
+  DOGE: { name: 'Dogecoin',  color: '#c2a63e' },
+  ADA:  { name: 'Cardano',   color: '#2b5cff' },
+  LINK: { name: 'Chainlink', color: '#4a6fe3' },
+  FLR:  { name: 'Flare',     color: '#e8416c' },
+  XLM:  { name: 'Stellar',   color: '#09b6e3' },
+  HBAR: { name: 'Hedera',    color: '#00b5b8' },
+  SHX:  { name: 'Stronghold', color: '#3b82f6' },
+};
+function renderCoinList() {
+  const list = $('coin-list');
+  if (!list) return;
+  list.innerHTML = '';
   SYMBOLS.forEach((s) => {
+    const meta = COIN_META[s] || { name: s, color: '#8b98ab' };
+    const p = state.prices[apiSym(s)];
+    const up = p && p.change24hPct >= 0;
     const b = document.createElement('button');
-    b.className = 'pill' + (s === state.symbol ? ' active' : '');
-    b.textContent = s;
+    b.type = 'button';
+    b.className = 'coin-row' + (s === state.symbol ? ' active' : '');
+    b.setAttribute('role', 'option');
+    b.setAttribute('aria-selected', String(s === state.symbol));
+    b.innerHTML =
+      '<span class="coin-badge" style="--coin:' + meta.color + '">' + esc(s) + '</span>' +
+      '<span class="coin-names"><span class="coin-name">' + esc(meta.name) + '</span>' +
+      '<span class="coin-ticker">' + esc(s) + ' / USD</span></span>' +
+      '<span class="coin-figures"><span class="coin-price mono">' + (p ? fmtPrice(p.price) : '—') + '</span>' +
+      '<span class="coin-chg ' + (up ? 'up' : 'down') + '">' +
+        (p ? (up ? '▲ +' : '▼ ') + fmtNum(p.change24hPct) + '%' : '—') + '</span></span>';
     b.addEventListener('click', () => setSymbol(s));
-    nav.appendChild(b);
+    list.appendChild(b);
   });
 }
 function setSymbol(s) {
   if (state.symbol === s) return;
   state.symbol = s;
-  renderPills();
+  renderCoinList();
   refreshDashboard();
   refreshSignals();
   refreshPatterns();
@@ -148,38 +174,15 @@ async function refreshPrices() {
   try {
     const data = await fetchJson('/api/prices');
     state.prices = data.prices || {};
-    renderTickers(data.updatedAt);
+    renderCoinList();
   } catch (err) {
-    $('ticker-grid').innerHTML = '<div class="empty-state">Could not load prices. Check your connection and press Refresh.</div>';
+    const list = $('coin-list');
+    if (list) list.innerHTML = '<div class="empty-state">Could not load prices. Check your connection and press Refresh.</div>';
   }
-}
-function renderTickers(updatedAt) {
-  $('dash-symbol').textContent = state.symbol;
-  const cur = state.prices[apiSym(state.symbol)];
-  $('dash-price').textContent = cur ? fmtPrice(cur.price) : '—';
-  const chg = $('dash-change');
-  if (cur && isFinite(cur.change24hPct)) {
-    chg.textContent = (cur.change24hPct >= 0 ? '▲ +' : '▼ ') + fmtNum(cur.change24hPct) + '%';
-    chg.className = 'chg-pill mono ' + (cur.change24hPct >= 0 ? 'up' : 'down');
-  } else { chg.textContent = '—'; chg.className = 'chg-pill mono'; }
-  $('dash-updated').textContent = updatedAt ? 'Updated ' + timeAgo(msOf(updatedAt)) : '';
-
-  const grid = $('ticker-grid');
-  grid.innerHTML = '';
-  SYMBOLS.forEach((s) => {
-    const p = state.prices[apiSym(s)];
-    const b = document.createElement('button');
-    b.className = 'ticker';
-    const up = p && p.change24hPct >= 0;
-    b.innerHTML =
-      '<div class="tk-sym">' + esc(s) + '/USD</div>' +
-      '<div class="tk-price">' + (p ? fmtPrice(p.price) : '—') + '</div>' +
-      '<div class="tk-chg ' + (up ? 'up' : 'down') + '">' + (p ? (up ? '+' : '') + fmtNum(p.change24hPct) + '%' : '—') + '</div>';
-    b.addEventListener('click', () => setSymbol(s));
-    grid.appendChild(b);
-  });
   // keep paper-trading "open at" price fresh
-  $('paper-at').textContent = cur ? fmtPrice(cur.price) : '—';
+  const cur = state.prices[apiSym(state.symbol)];
+  const at = $('paper-at');
+  if (at) at.textContent = cur ? fmtPrice(cur.price) : '—';
   markPositions();
 }
 function refreshDashboard() { refreshPrices(); }
@@ -1005,7 +1008,7 @@ function bootApp() {
   if (booted) return;
   booted = true;
   initPanels();
-  renderPills();
+  renderCoinList();
   renderPaperForm();
   refreshPrices();
   refreshSignals();
