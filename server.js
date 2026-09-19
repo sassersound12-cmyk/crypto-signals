@@ -101,7 +101,9 @@ function verifyRateLimit(req, res, next) {
 // ---------------------------------------------------------------------------
 // Validation helpers
 // ---------------------------------------------------------------------------
-const GRANULARITIES = new Set([60, 300, 900, 3600, 21600, 86400]);
+const GRANULARITIES = new Set([
+  60, 300, 900, 1800, 3600, 21600, 43200, 86400, 604800, 2592000,
+]);
 
 function badRequest(res, message) {
   return res.status(400).json({ error: message });
