@@ -23,6 +23,7 @@ const TV_EXCHANGE = { SHX: 'KRAKEN:SHXUSD' };
 const tvSym = (s) => TV_EXCHANGE[s] || ('COINBASE:' + s + 'USD');
 const LS_UNLOCKED = 'cs_unlocked';
 const LS_PAPER = 'cs_paper';
+const LS_PAPER_LEV = 'cs_paper_lev';
 const LS_DISCLOSURE = 'cs_disclosure';
 const REFRESH_MS = 30000;
 
@@ -45,6 +46,7 @@ function savedInterval(key) {
 }
 state.patternG = savedInterval(LS_PATTERN_G);
 state.ribbonG = savedInterval(LS_RIBBON_G);
+state.paperLev = Math.min(50, Math.max(1, Number(localStorage.getItem(LS_PAPER_LEV)) || 1));
 function renderIntervalBar(elId, currentG, onPick) {
   const el = $(elId);
   if (!el) return;
@@ -808,7 +810,15 @@ function drawRibbon(ctx, w, h, candles) {
 function loadPaper() {
   try {
     const d = JSON.parse(localStorage.getItem(LS_PAPER));
-    if (d && isFinite(d.cash)) return { cash: d.cash, positions: d.positions || [], history: d.history || [] };
+    // Normalize pre-leverage positions: 1x, margin = old size.
+    if (d && isFinite(d.cash)) return {
+      cash: d.cash,
+      positions: (d.positions || []).map((p) => ({
+        leverage: 1, tp: null, sl: null, ...p,
+        margin: p.margin ?? p.size,
+      })),
+      history: d.history || [],
+    };
   } catch (e) { /* fall through */ }
   return { cash: 10000, positions: [], history: [] };
 }
@@ -820,37 +830,70 @@ function priceOf(sym) {
   return p ? p.price : null;
 }
 function positionValue(pos) {
-  const px = priceOf(pos.symbol);
-  if (px == null) return pos.size;
-  return pos.side === 'LONG' ? pos.qty * px : pos.size + (pos.entry - px) * pos.qty;
+  const margin = pos.margin ?? pos.size ?? 0;
+  return Math.max(0, margin + positionPnl(pos)); // floor at zero: liquidation caps the loss
 }
 function positionPnl(pos) {
   const px = priceOf(pos.symbol);
   if (px == null) return 0;
-  return pos.side === 'LONG' ? (px - pos.entry) * pos.qty : (pos.entry - px) * pos.qty;
+  const margin = pos.margin ?? pos.size ?? 0;
+  const lev = pos.leverage || 1;
+  const qty = (margin * lev) / pos.entry;
+  const raw = pos.side === 'LONG' ? (px - pos.entry) * qty : (pos.entry - px) * qty;
+  return Math.max(-margin, raw); // can't lose more than the margin put up
 }
+/** Simplified liquidation estimate: the price where losses would eat the whole margin. */
+function estLiqPrice(side, entry, lev) {
+  return side === 'LONG' ? entry * (1 - 1 / lev) : entry * (1 + 1 / lev);
+}
+function liqPrice(p) { return estLiqPrice(p.side, p.entry, p.leverage || 1); }
 function initPaper() {
   document.querySelectorAll('.seg-btn').forEach((b) =>
     b.addEventListener('click', () => {
       document.querySelectorAll('.seg-btn').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
       state.paperSide = b.dataset.side;
+      renderPaperForm(); // refresh the liquidation hint for the new side
     }));
+  const levInput = $('paper-lev');
+  levInput.value = state.paperLev;
+  const syncLev = () => {
+    state.paperLev = Math.min(50, Math.max(1, Number(levInput.value) || 1));
+    localStorage.setItem(LS_PAPER_LEV, String(state.paperLev));
+    $('paper-lev-val').textContent = state.paperLev + 'x';
+    renderPaperForm();
+  };
+  levInput.addEventListener('input', syncLev);
+  syncLev();
   $('paper-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const size = parseFloat($('paper-size').value);
     const px = priceOf(state.symbol);
     if (!isFinite(size) || size <= 0) return;
     if (px == null) { alert('No live price yet — wait for the dashboard to load.'); return; }
-    if (size > paper.cash) { alert('Not enough virtual cash for that size.'); return; }
+    if (size > paper.cash) { alert('Not enough virtual cash for that margin.'); return; }
+    const lev = state.paperLev || 1;
+    const tp = parseFloat($('paper-tp').value), sl = parseFloat($('paper-sl').value);
+    const hasTp = isFinite(tp) && tp > 0, hasSl = isFinite(sl) && sl > 0;
+    if (hasTp && (state.paperSide === 'LONG' ? tp <= px : tp >= px)) {
+      alert('Take profit must be above the entry for LONG, below it for SHORT.');
+      return;
+    }
+    if (hasSl && (state.paperSide === 'LONG' ? sl >= px : sl <= px)) {
+      alert('Stop loss must be below the entry for LONG, above it for SHORT.');
+      return;
+    }
     paper.cash -= size;
     paper.positions.push({
       id: 'p' + Date.now().toString(36),
       symbol: state.symbol, side: state.paperSide,
-      entry: px, qty: size / px, size,
+      entry: px, qty: (size * lev) / px, margin: size, leverage: lev,
+      tp: hasTp ? tp : null, sl: hasSl ? sl : null,
       openedAt: Date.now(),
     });
     $('paper-size').value = '';
+    $('paper-tp').value = '';
+    $('paper-sl').value = '';
     savePaper(paper);
     renderPaper();
   });
@@ -864,11 +907,37 @@ function initPaper() {
 }
 function renderPaperForm() {
   const cur = state.prices[apiSym(state.symbol)];
-  $('paper-at').textContent = cur ? fmtPrice(cur.price) : '—';
+  const px = cur ? cur.price : null;
+  $('paper-at').textContent = px ? fmtPrice(px) : '—';
+  const lev = state.paperLev || 1;
+  $('paper-liq').textContent = px
+    ? 'Est. liquidation @ ' + lev + 'x ' + state.paperSide + ': ' + fmtPrice(estLiqPrice(state.paperSide, px, lev))
+    : '';
 }
 function markPositions() { // light refresh of live P&L numbers on price ticks
   if ($('app').hidden) return;
+  checkPaperTriggers(); // auto-close on TP / SL / liquidation
   renderPaper();
+}
+/** Close positions whose take-profit, stop-loss, or liquidation level was hit. */
+function checkPaperTriggers() {
+  if (!paper.positions.length) return;
+  for (const p of [...paper.positions]) {
+    const px = priceOf(p.symbol);
+    if (px == null) continue;
+    const liq = liqPrice(p);
+    let reason = null;
+    if (p.side === 'LONG') {
+      if (px <= liq) reason = 'Liquidated';
+      else if (p.sl && px <= p.sl) reason = 'Stop loss';
+      else if (p.tp && px >= p.tp) reason = 'Take profit';
+    } else {
+      if (px >= liq) reason = 'Liquidated';
+      else if (p.sl && px >= p.sl) reason = 'Stop loss';
+      else if (p.tp && px <= p.tp) reason = 'Take profit';
+    }
+    if (reason) closePosition(p.id, reason);
+  }
 }
 function renderPaper() {
   const openPnl = paper.positions.reduce((s, p) => s + positionPnl(p), 0);
@@ -884,12 +953,18 @@ function renderPaper() {
   if (!paper.positions.length) posEl.innerHTML = '<div class="empty-state">No open positions. Open a simulated LONG or SHORT above.</div>';
   paper.positions.forEach((p) => {
     const pnl = positionPnl(p), px = priceOf(p.symbol);
+    const lev = p.leverage || 1;
+    const detLine = '<span style="color:var(--muted);font-size:12px">' + lev + 'x' +
+      (p.tp ? ' · TP <span class="mono">' + fmtPrice(p.tp) + '</span>' : '') +
+      (p.sl ? ' · SL <span class="mono">' + fmtPrice(p.sl) + '</span>' : '') +
+      ' · Liq <span class="mono">' + fmtPrice(liqPrice(p)) + '</span></span>';
     const row = document.createElement('div');
     row.className = 'pos-row';
     row.innerHTML =
       '<span class="side-' + p.side + '">' + p.side + '</span>' +
       '<span class="grow"><b>' + esc(p.symbol) + '</b> · ' + fmtNum(p.qty, 6) + ' @ <span class="mono">' + fmtPrice(p.entry) + '</span><br>' +
-      '<span style="color:var(--muted);font-size:12px">now <span class="mono">' + fmtPrice(px) + '</span> · ' + timeAgo(p.openedAt) + '</span></span>' +
+      '<span style="color:var(--muted);font-size:12px">now <span class="mono">' + fmtPrice(px) + '</span> · ' + timeAgo(p.openedAt) + '</span><br>' +
+      detLine + '</span>' +
       '<span class="mono ' + (pnl >= 0 ? 'pnl-up' : 'pnl-down') + '">' + fmtSigned(pnl) + '</span>';
     const btn = document.createElement('button');
     btn.className = 'btn btn-ghost btn-sm';
@@ -908,12 +983,13 @@ function renderPaper() {
     row.innerHTML =
       '<span class="side-' + t.side + '">' + t.side + '</span>' +
       '<span class="grow"><b>' + esc(t.symbol) + '</b> <span class="mono">' + fmtPrice(t.entry) + ' → ' + fmtPrice(t.exit) + '</span><br>' +
-      '<span style="color:var(--muted);font-size:12px">' + fmtDate(t.openedAt) + ' → ' + fmtDate(t.closedAt) + '</span></span>' +
+      '<span style="color:var(--muted);font-size:12px">' + fmtDate(t.openedAt) + ' → ' + fmtDate(t.closedAt) +
+      (t.reason && t.reason !== 'Manual' ? ' · ' + esc(t.reason) : '') + '</span></span>' +
       '<span class="mono ' + (t.pnl >= 0 ? 'pnl-up' : 'pnl-down') + '">' + fmtSigned(t.pnl) + '</span>';
     hEl.appendChild(row);
   });
 }
-function closePosition(id) {
+function closePosition(id, reason) {
   const i = paper.positions.findIndex((p) => p.id === id);
   if (i < 0) return;
   const p = paper.positions[i];
@@ -922,7 +998,7 @@ function closePosition(id) {
   const val = positionValue(p);
   const pnl = positionPnl(p);
   paper.cash += val;
-  paper.history.unshift({ ...p, exit: px, closedAt: Date.now(), pnl });
+  paper.history.unshift({ ...p, exit: px, closedAt: Date.now(), pnl, reason: reason || 'Manual' });
   paper.positions.splice(i, 1);
   savePaper(paper);
   renderPaper();
