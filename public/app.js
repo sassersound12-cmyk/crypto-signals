@@ -126,7 +126,7 @@ const COIN_META = {
   BTC:  { name: 'Bitcoin',   color: '#f7931a' },
   ETH:  { name: 'Ethereum',  color: '#627eea' },
   SOL:  { name: 'Solana',    color: '#9945ff' },
-  XRP:  { name: 'XRP',       color: '#25a9e0' },
+  XRP:  { name: 'XRP Ledger', color: '#25a9e0' },
   DOGE: { name: 'Dogecoin',  color: '#c2a63e' },
   ADA:  { name: 'Cardano',   color: '#2b5cff' },
   LINK: { name: 'Chainlink', color: '#4a6fe3' },
