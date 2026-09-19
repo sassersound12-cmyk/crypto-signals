@@ -25,7 +25,7 @@ const LS_UNLOCKED = 'cs_unlocked';
 const LS_PAPER = 'cs_paper';
 const LS_PAPER_LEV = 'cs_paper_lev';
 const LS_DISCLOSURE = 'cs_disclosure';
-const REFRESH_MS = 30000;
+const REFRESH_MS = 10000;
 
 const $ = (id) => document.getElementById(id);
 const state = { symbol: 'BTC', prices: {}, lastSignals: null, deferredPrompt: null, paperSide: 'LONG' };
@@ -1185,7 +1185,7 @@ function bootApp() {
   $('refresh-btn').addEventListener('click', () => {
     refreshPrices(); refreshSignals(); refreshPatterns(); refreshRibbon(); refreshNews();
   });
-  setInterval(() => { refreshPrices(); }, REFRESH_MS);       // 30s price auto-refresh
+  setInterval(() => { refreshPrices(); }, REFRESH_MS);       // 10s price auto-refresh
   setInterval(() => { refreshSignals(); refreshNews(); }, 120000); // slower cycle for signals/news
   window.addEventListener('resize', () => {
     refreshPatterns();
