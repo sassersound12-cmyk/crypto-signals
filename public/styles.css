@@ -75,8 +75,43 @@ a { color: var(--green); }
   backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 17px; }
-.brand img { border-radius: 7px; }
+.brand img { border-radius: 7px; display: block; }
 .brand em { font-style: normal; color: var(--green); }
+
+/* ---------- logo intro animation (plays once on app open) ---------- */
+.brand { position: relative; }
+.brand-icon-wrap { position: relative; display: inline-flex; border-radius: 7px; overflow: hidden; }
+.logo-intro .brand-icon-wrap {
+  animation: logoPop .7s cubic-bezier(.18, 1.35, .38, 1) both,
+             logoGlow 1.4s ease-out .1s both;
+}
+@keyframes logoPop {
+  0% { opacity: 0; transform: scale(.2) rotate(-45deg); }
+  60% { opacity: 1; transform: scale(1.12) rotate(6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes logoGlow {
+  0%, 100% { box-shadow: 0 0 0 rgba(0, 255, 157, 0); }
+  35% { box-shadow: 0 0 22px rgba(0, 255, 157, .55); }
+}
+.logo-intro .brand-icon-wrap::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, .55) 50%, transparent 60%);
+  transform: translateX(-120%);
+  animation: logoShine .8s ease .45s both;
+}
+@keyframes logoShine { to { transform: translateX(120%); } }
+.brand-word { display: inline-block; }
+.brand-word .bl { display: inline-block; }
+.logo-intro .brand-word .bl {
+  opacity: 0; transform: translateY(12px);
+  animation: letterIn .45s cubic-bezier(.2, .9, .3, 1.2) forwards;
+}
+@keyframes letterIn { to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .logo-intro .brand-icon-wrap, .logo-intro .brand-icon-wrap::after,
+  .logo-intro .brand-word .bl { animation: none; }
+}
 .topbar-actions { margin-left: auto; }
 
 .disclosure-banner {
