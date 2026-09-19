@@ -37,7 +37,6 @@
       <img src="icons/icon-192.png" alt="" width="28" height="28">
       <span>Crypto <em>Signals</em></span>
     </div>
-    <nav class="symbol-pills" id="symbol-pills" aria-label="Symbol selector"></nav>
     <div class="topbar-actions">
       <button id="install-btn" class="btn btn-ghost" hidden>Install app</button>
     </div>
@@ -50,7 +49,7 @@
   </div>
 
   <nav class="section-nav" aria-label="Sections">
-    <a href="#dashboard">Dashboard</a>
+    <a href="#dashboard">Coins</a>
     <a href="#signals">Signals</a>
     <a href="#patterns">Patterns</a>
     <a href="#tv-section">Chart</a>
@@ -63,22 +62,12 @@
 
   <main class="wrap">
 
-    <!-- DASHBOARD -->
+    <!-- COINS -->
     <section id="dashboard" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span>
-        <h2>Dashboard</h2>
+        <h2>Coins</h2>
         <button id="refresh-btn" class="btn btn-ghost btn-sm">⟳ Refresh</button>
       </div><div class="card-body">
-      <div class="price-row">
-        <div>
-          <div class="sym-name" id="dash-symbol">BTC</div>
-          <div class="price mono" id="dash-price">—</div>
-        </div>
-        <div class="price-side">
-          <span class="chg-pill mono" id="dash-change">—</span>
-          <span class="updated" id="dash-updated">—</span>
-        </div>
-      </div>
-      <div class="ticker-grid" id="ticker-grid"></div>
+      <div class="coin-list" id="coin-list" role="listbox" aria-label="Select coin"></div>
     </div></section>
 
     <!-- SIGNALS -->
