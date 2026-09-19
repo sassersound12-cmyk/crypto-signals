@@ -146,7 +146,17 @@
           <button type="button" class="seg-btn active" data-side="LONG">LONG</button>
           <button type="button" class="seg-btn" data-side="SHORT">SHORT</button>
         </div>
-        <input id="paper-size" type="number" min="1" step="any" placeholder="Size (USD)" aria-label="Position size in USD" required>
+        <input id="paper-size" type="number" min="1" step="any" placeholder="Margin (USD)" aria-label="Margin in USD" required>
+        <div class="lev-row">
+          <span class="lev-label">Leverage</span>
+          <input id="paper-lev" type="range" min="1" max="50" step="1" value="1" aria-label="Leverage">
+          <strong id="paper-lev-val" class="mono">1x</strong>
+        </div>
+        <div class="tpsl-row">
+          <input id="paper-tp" type="number" min="0" step="any" placeholder="Take profit ($) — optional" aria-label="Take profit price">
+          <input id="paper-sl" type="number" min="0" step="any" placeholder="Stop loss ($) — optional" aria-label="Stop loss price">
+        </div>
+        <div class="liq-hint" id="paper-liq"></div>
         <button type="submit" class="btn btn-primary">Open position @ <span id="paper-at" class="mono">—</span></button>
       </form>
       <h3 class="sub-h">Open positions</h3>
