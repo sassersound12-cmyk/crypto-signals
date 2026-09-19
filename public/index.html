@@ -98,6 +98,7 @@
 
     <!-- PATTERNS -->
     <section id="patterns" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span><h2>Pattern overlays</h2></div><div class="card-body">
+      <div class="interval-bar" id="pattern-intervals" role="group" aria-label="Pattern chart interval"></div>
       <canvas id="pattern-chart" class="chart" height="320" aria-label="Candlestick chart with pattern overlays"></canvas>
       <div id="pattern-cards" class="pattern-cards"></div>
     </div></section>
@@ -125,6 +126,7 @@
     <!-- EMA RIBBON -->
     <section id="ribbon" class="card"><div class="card-head"><span class="collapse-chevron" aria-hidden="true"></span><h2>EMA ribbon</h2></div><div class="card-body">
       <p class="chart-note">EMAs 8 · 13 · 21 · 34 · 55 · 89. <span class="dot green"></span> price crossed above ribbon (buy zone) · <span class="dot red"></span> crossed below (sell zone). Zone flips are observations, not advice.</p>
+      <div class="interval-bar" id="ribbon-intervals" role="group" aria-label="EMA ribbon interval"></div>
       <canvas id="ribbon-chart" class="chart" height="340" aria-label="EMA ribbon chart"></canvas>
       <div class="legend"><span class="lg"><i style="background:#00e676"></i>fast EMA 8</span><span class="lg"><i style="background:#3d5afe"></i>slow EMA 89</span><span class="lg"><span class="dot green"></span>buy-zone flip</span><span class="lg"><span class="dot red"></span>sell-zone flip</span></div>
     </div></section>
