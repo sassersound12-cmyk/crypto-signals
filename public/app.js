@@ -1004,9 +1004,38 @@ function initPanels() {
   syncCollapseAllBtn(st);
 }
 
+/* Logo intro animation: plays once when the app opens. */
+function playLogoIntro() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const brand = $('brand'), word = $('brand-word');
+  if (!brand || !word || brand.dataset.introDone) return;
+  brand.dataset.introDone = '1';
+  let i = 0;
+  const splitNode = (node) => {
+    Array.from(node.childNodes).forEach((child) => {
+      if (child.nodeType === 3) {
+        const frag = document.createDocumentFragment();
+        Array.from(child.textContent).forEach((ch) => {
+          const s = document.createElement('span');
+          s.className = 'bl';
+          s.textContent = ch === ' ' ? '\u00A0' : ch;
+          s.style.animationDelay = (200 + i * 35) + 'ms';
+          i++;
+          frag.appendChild(s);
+        });
+        node.replaceChild(frag, child);
+      } else if (child.nodeType === 1) splitNode(child);
+    });
+  };
+  splitNode(word);
+  // add the class after paint so the animation starts from its 0% keyframe
+  requestAnimationFrame(() => requestAnimationFrame(() => brand.classList.add('logo-intro')));
+}
+
 function bootApp() {
   if (booted) return;
   booted = true;
+  playLogoIntro();
   initPanels();
   renderCoinList();
   renderPaperForm();
