@@ -1,6 +1,6 @@
 /* Crypto Signals — service worker (offline shell, cache-first) */
 // Bump this when editing cached assets so clients pick up the new shell.
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const CACHE = 'crypto-signals-' + CACHE_VERSION;
 
 const PRECACHE = [
