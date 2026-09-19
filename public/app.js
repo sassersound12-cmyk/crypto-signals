@@ -29,6 +29,37 @@ const REFRESH_MS = 30000;
 const $ = (id) => document.getElementById(id);
 const state = { symbol: 'BTC', prices: {}, lastSignals: null, deferredPrompt: null, paperSide: 'LONG' };
 
+/* ---------- chart intervals ---------- */
+const INTERVALS = [
+  { label: '30m', g: 1800 },
+  { label: '1h', g: 3600 },
+  { label: '12h', g: 43200 },
+  { label: '24h', g: 86400 },
+  { label: '1w', g: 604800 },
+  { label: '30d', g: 2592000 },
+];
+const LS_PATTERN_G = 'cs_pattern_g', LS_RIBBON_G = 'cs_ribbon_g';
+function savedInterval(key) {
+  const v = Number(localStorage.getItem(key));
+  return INTERVALS.some((i) => i.g === v) ? v : 3600;
+}
+state.patternG = savedInterval(LS_PATTERN_G);
+state.ribbonG = savedInterval(LS_RIBBON_G);
+function renderIntervalBar(elId, currentG, onPick) {
+  const el = $(elId);
+  if (!el) return;
+  el.innerHTML = '';
+  INTERVALS.forEach(({ label, g }) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'interval-btn' + (g === currentG ? ' active' : '');
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(g === currentG));
+    b.addEventListener('click', () => { if (g !== currentG) onPick(g); });
+    el.appendChild(b);
+  });
+}
+
 function fmtPrice(p) {
   if (p == null || !isFinite(p)) return '—';
   const a = Math.abs(p);
@@ -166,6 +197,7 @@ function setSymbol(s) {
   refreshDashboard();
   refreshSignals();
   refreshPatterns();
+  refreshRibbon();
   loadRainbow(s);
   loadTradingView();
   renderPaperForm();
@@ -299,6 +331,11 @@ async function refreshPatterns() {
   // the latest response may draw, so a slow earlier coin never overwrites
   // the current one (which reads as "the overlay doesn't work").
   const req = ++patternReq;
+  renderIntervalBar('pattern-intervals', state.patternG, (g) => {
+    state.patternG = g;
+    localStorage.setItem(LS_PATTERN_G, String(g));
+    refreshPatterns();
+  });
   const canvas = $('pattern-chart');
   const { ctx, w, h } = fitCanvas(canvas);
   ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
@@ -306,7 +343,7 @@ async function refreshPatterns() {
   try {
     // The endpoint returns the exact candle window the patterns were
     // detected on, so startIndex/endIndex overlay without misalignment.
-    const pat = await fetchJson('/api/patterns?symbol=' + encodeURIComponent(apiSym(state.symbol)));
+    const pat = await fetchJson('/api/patterns?symbol=' + encodeURIComponent(apiSym(state.symbol)) + '&granularity=' + state.patternG);
     if (req !== patternReq) return; // superseded by a newer request
     const candles = pat.candles || [];
     // Re-fit after the fetch: an overlapping refresh may have drawn since,
@@ -669,18 +706,28 @@ function emaSeries(values, period) {
   });
   return out;
 }
+let ribbonReq = 0;
 async function initRibbon() {
+  // Sequence guard: only the latest request may draw.
+  const req = ++ribbonReq;
+  renderIntervalBar('ribbon-intervals', state.ribbonG, (g) => {
+    state.ribbonG = g;
+    localStorage.setItem(LS_RIBBON_G, String(g));
+    initRibbon();
+  });
   const canvas = $('ribbon-chart');
   const { ctx, w, h } = fitCanvas(canvas);
   ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
   ctx.fillText('Loading EMAs…', 20, 40);
   try {
-    const candles = await fetchCandles(apiSym(state.symbol), 3600, 2);
+    const candles = await fetchCandles(apiSym(state.symbol), state.ribbonG, 2);
+    if (req !== ribbonReq) return; // superseded by a newer request
     if (!candles.length) throw new Error('no candles');
     // Re-fit after the fetch: an overlapping refresh may have drawn since.
     const f = fitCanvas(canvas);
     drawRibbon(f.ctx, f.w, f.h, candles.slice(-240));
   } catch (err) {
+    if (req !== ribbonReq) return; // superseded by a newer request
     const f = fitCanvas(canvas);
     f.ctx.fillStyle = '#8b98ab'; f.ctx.font = '13px sans-serif';
     f.ctx.fillText('Could not load EMA data.', 20, 40);
