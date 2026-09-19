@@ -188,17 +188,22 @@ async function refreshPrices() {
 function refreshDashboard() { refreshPrices(); }
 
 /* ---------- 4. Signals panel ---------- */
+let signalsReq = 0;
 async function refreshSignals() {
+  // Same sequence guard as patterns: only the latest request may render.
+  const req = ++signalsReq;
   const list = $('signal-list');
   list.innerHTML = '<div class="empty-state">Loading signals…</div>';
   try {
     const data = await fetchJson('/api/signals?symbol=' + encodeURIComponent(apiSym(state.symbol)));
+    if (req !== signalsReq) return; // superseded by a newer request
     state.lastSignals = data;
     renderRegime(data.regime);
     renderRsi(data.rsi);
     renderLevels(data);
     renderSignalCards(data.signals);
   } catch (err) {
+    if (req !== signalsReq) return; // superseded by a newer request
     list.innerHTML = '<div class="empty-state">Could not load signals. Check your connection and try again.</div>';
   }
 }
@@ -288,7 +293,12 @@ async function fetchCandles(symbol, granularity, maxChunks, chunkLimit) {
 
 /* ---------- 5. Pattern overlay chart ---------- */
 const PC = { left: 8, right: 76, top: 12, bottom: 26 };
+let patternReq = 0;
 async function refreshPatterns() {
+  // Sequence guard: tapping coins quickly fires overlapping requests; only
+  // the latest response may draw, so a slow earlier coin never overwrites
+  // the current one (which reads as "the overlay doesn't work").
+  const req = ++patternReq;
   const canvas = $('pattern-chart');
   const { ctx, w, h } = fitCanvas(canvas);
   ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
@@ -297,6 +307,7 @@ async function refreshPatterns() {
     // The endpoint returns the exact candle window the patterns were
     // detected on, so startIndex/endIndex overlay without misalignment.
     const pat = await fetchJson('/api/patterns?symbol=' + encodeURIComponent(apiSym(state.symbol)));
+    if (req !== patternReq) return; // superseded by a newer request
     const candles = pat.candles || [];
     // Re-fit after the fetch: an overlapping refresh may have drawn since,
     // which would otherwise leave doubled-up gridlines and labels.
@@ -304,6 +315,7 @@ async function refreshPatterns() {
     drawPatternChart(f.ctx, f.w, f.h, candles, pat.patterns || []);
     renderPatternCards(pat.patterns || [], pat.note);
   } catch (err) {
+    if (req !== patternReq) return; // superseded by a newer request
     const f = fitCanvas(canvas);
     f.ctx.fillStyle = '#8b98ab'; f.ctx.font = '13px sans-serif';
     f.ctx.fillText('Could not load chart data.', 20, 40);
