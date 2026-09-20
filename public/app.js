@@ -28,6 +28,12 @@ const LS_DISCLOSURE = 'cs_disclosure';
 const REFRESH_MS = 10000;
 
 const $ = (id) => document.getElementById(id);
+/* Loading placeholders only on first paint: refreshes keep the last good
+   content on screen instead of flashing "Loading…" every cycle. */
+function loadingOnce(el, html) {
+  if (el && !el.dataset.loaded) el.innerHTML = html;
+}
+function markLoaded(el) { if (el) el.dataset.loaded = '1'; }
 const state = { symbol: 'BTC', prices: {}, lastSignals: null, deferredPrompt: null, paperSide: 'LONG' };
 
 /* ---------- chart intervals ---------- */
@@ -168,28 +174,46 @@ const COIN_META = {
   HBAR: { name: 'Hedera',    color: '#00b5b8' },
   SHX:  { name: 'Stronghold', color: '#3b82f6' },
 };
+const coinRows = {}; // sym -> {btn, price, chg}: rows built once, updated in place
 function renderCoinList() {
   const list = $('coin-list');
   if (!list) return;
-  list.innerHTML = '';
+  if (!list.dataset.built) {
+    list.innerHTML = '';
+    SYMBOLS.forEach((s) => {
+      const meta = COIN_META[s] || { name: s, color: '#8b98ab' };
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'coin-row';
+      b.setAttribute('role', 'option');
+      b.innerHTML =
+        '<span class="coin-badge" style="--coin:' + meta.color + '">' + esc(s) + '</span>' +
+        '<span class="coin-names"><span class="coin-name">' + esc(meta.name) + '</span>' +
+        '<span class="coin-ticker">' + esc(s) + ' / USD</span></span>' +
+        '<span class="coin-figures"><span class="coin-price mono">—</span>' +
+        '<span class="coin-chg">—</span></span>';
+      b.addEventListener('click', () => setSymbol(s));
+      list.appendChild(b);
+      coinRows[s] = {
+        btn: b,
+        price: b.querySelector('.coin-price'),
+        chg: b.querySelector('.coin-chg'),
+      };
+    });
+    list.dataset.built = '1';
+  }
+  // In-place update: no innerHTML rebuild, so taps never get swallowed
+  // mid-refresh and scroll position is untouched.
   SYMBOLS.forEach((s) => {
-    const meta = COIN_META[s] || { name: s, color: '#8b98ab' };
+    const r = coinRows[s];
+    if (!r) return;
     const p = state.prices[apiSym(s)];
     const up = p && p.change24hPct >= 0;
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'coin-row' + (s === state.symbol ? ' active' : '');
-    b.setAttribute('role', 'option');
-    b.setAttribute('aria-selected', String(s === state.symbol));
-    b.innerHTML =
-      '<span class="coin-badge" style="--coin:' + meta.color + '">' + esc(s) + '</span>' +
-      '<span class="coin-names"><span class="coin-name">' + esc(meta.name) + '</span>' +
-      '<span class="coin-ticker">' + esc(s) + ' / USD</span></span>' +
-      '<span class="coin-figures"><span class="coin-price mono">' + (p ? fmtPrice(p.price) : '—') + '</span>' +
-      '<span class="coin-chg ' + (up ? 'up' : 'down') + '">' +
-        (p ? (up ? '▲ +' : '▼ ') + fmtNum(p.change24hPct) + '%' : '—') + '</span></span>';
-    b.addEventListener('click', () => setSymbol(s));
-    list.appendChild(b);
+    r.btn.classList.toggle('active', s === state.symbol);
+    r.btn.setAttribute('aria-selected', String(s === state.symbol));
+    r.price.textContent = p ? fmtPrice(p.price) : '—';
+    r.chg.textContent = p ? (up ? '▲ +' : '▼ ') + fmtNum(p.change24hPct) + '%' : '—';
+    r.chg.className = 'coin-chg ' + (p ? (up ? 'up' : 'down') : '');
   });
 }
 function setSymbol(s) {
@@ -210,8 +234,10 @@ async function refreshPrices() {
     state.prices = data.prices || {};
     renderCoinList();
   } catch (err) {
+    // Don't wipe a good list on a transient failure; only complain if
+    // nothing has ever rendered.
     const list = $('coin-list');
-    if (list) list.innerHTML = '<div class="empty-state">Could not load prices. Check your connection and press Refresh.</div>';
+    if (list && !list.dataset.built) list.innerHTML = '<div class="empty-state">Could not load prices. Check your connection and press Refresh.</div>';
   }
   // keep paper-trading "open at" price fresh
   const cur = state.prices[apiSym(state.symbol)];
@@ -227,7 +253,7 @@ async function refreshSignals() {
   // Same sequence guard as patterns: only the latest request may render.
   const req = ++signalsReq;
   const list = $('signal-list');
-  list.innerHTML = '<div class="empty-state">Loading signals…</div>';
+  loadingOnce(list, '<div class="empty-state">Loading signals…</div>');
   try {
     const data = await fetchJson('/api/signals?symbol=' + encodeURIComponent(apiSym(state.symbol)));
     if (req !== signalsReq) return; // superseded by a newer request
@@ -238,7 +264,7 @@ async function refreshSignals() {
     renderSignalCards(data.signals);
   } catch (err) {
     if (req !== signalsReq) return; // superseded by a newer request
-    list.innerHTML = '<div class="empty-state">Could not load signals. Check your connection and try again.</div>';
+    loadingOnce(list, '<div class="empty-state">Could not load signals. Check your connection and try again.</div>');
   }
 }
 function renderRegime(regime) {
@@ -269,6 +295,7 @@ function renderLevels(data) {
 function renderSignalCards(signals) {
   const list = $('signal-list');
   list.innerHTML = '';
+  markLoaded(list);
   if (!signals || !signals.length) {
     list.innerHTML = '<div class="empty-state">No fresh signals — market is consolidating.</div>';
     return;
@@ -328,6 +355,7 @@ async function fetchCandles(symbol, granularity, maxChunks, chunkLimit) {
 /* ---------- 5. Pattern overlay chart ---------- */
 const PC = { left: 8, right: 76, top: 12, bottom: 26 };
 let patternReq = 0;
+let patternDrawn = false; // keep the last chart on screen during refreshes
 async function refreshPatterns() {
   // Sequence guard: tapping coins quickly fires overlapping requests; only
   // the latest response may draw, so a slow earlier coin never overwrites
@@ -339,9 +367,13 @@ async function refreshPatterns() {
     refreshPatterns();
   });
   const canvas = $('pattern-chart');
-  const { ctx, w, h } = fitCanvas(canvas);
-  ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
-  ctx.fillText('Loading candles…', 20, 40);
+  if (!patternDrawn) {
+    // First paint only: show a placeholder. On refreshes the last chart
+    // stays on screen (no clear) until the new one is ready — no flicker.
+    const { ctx } = fitCanvas(canvas);
+    ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
+    ctx.fillText('Loading candles…', 20, 40);
+  }
   try {
     // The endpoint returns the exact candle window the patterns were
     // detected on, so startIndex/endIndex overlay without misalignment.
@@ -352,9 +384,11 @@ async function refreshPatterns() {
     // which would otherwise leave doubled-up gridlines and labels.
     const f = fitCanvas(canvas);
     drawPatternChart(f.ctx, f.w, f.h, candles, pat.patterns || []);
+    if (candles.length) patternDrawn = true;
     renderPatternCards(pat.patterns || [], pat.note);
   } catch (err) {
     if (req !== patternReq) return; // superseded by a newer request
+    if (patternDrawn) return; // keep the last good chart on transient errors
     const f = fitCanvas(canvas);
     f.ctx.fillStyle = '#8b98ab'; f.ctx.font = '13px sans-serif';
     f.ctx.fillText('Could not load chart data.', 20, 40);
@@ -512,15 +546,21 @@ async function initRainbow() {
 }
 async function loadRainbow(sym) {
   const canvas = $('rainbow-chart');
-  const { ctx, w, h } = fitCanvas(canvas);
   const title = $('rainbow-title');
   if (title) title.textContent = sym + ' rainbow chart';
   // Generation guard: rapid symbol taps must not let an older fetch
   // draw over (or leave stale data under) a newer one.
   const gen = ++rbGen;
+  const hadData = rb.candles.length > 0;
   rb.candles = []; rb.fit = null; rb.view = [0, 0]; rb.range = 'all';
-  ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
-  ctx.fillText('Loading ' + sym + ' history…', 20, 40);
+  let ctx = null;
+  if (!hadData) {
+    // First paint only: otherwise the previous coin's chart stays on
+    // screen (no clear) until the new history arrives — no flicker.
+    ({ ctx } = fitCanvas(canvas));
+    ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
+    ctx.fillText('Loading ' + sym + ' history…', 20, 40);
+  }
   try {
     // Single request for up to 1000 daily candles (~2.7 years); the server
     // stitches Coinbase's 300-candle pages internally.
@@ -533,6 +573,8 @@ async function loadRainbow(sym) {
     drawRainbow();
   } catch (err) {
     if (gen !== rbGen) return;
+    if (hadData) return; // keep the last good chart on transient errors
+    if (!ctx) ({ ctx } = fitCanvas(canvas));
     ctx.fillStyle = '#8b98ab';
     ctx.fillText('Could not load long-term ' + sym + ' history.', 20, 40);
   }
@@ -712,6 +754,7 @@ function emaSeries(values, period) {
   return out;
 }
 let ribbonReq = 0;
+let ribbonDrawn = false; // keep the last ribbon on screen during refreshes
 async function initRibbon() {
   // Sequence guard: only the latest request may draw.
   const req = ++ribbonReq;
@@ -721,9 +764,13 @@ async function initRibbon() {
     initRibbon();
   });
   const canvas = $('ribbon-chart');
-  const { ctx, w, h } = fitCanvas(canvas);
-  ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
-  ctx.fillText('Loading EMAs…', 20, 40);
+  if (!ribbonDrawn) {
+    // First paint only: on refreshes the last ribbon stays until the new
+    // one is ready — no clear, no flicker.
+    const { ctx } = fitCanvas(canvas);
+    ctx.fillStyle = '#8b98ab'; ctx.font = '13px sans-serif';
+    ctx.fillText('Loading EMAs…', 20, 40);
+  }
   try {
     const candles = await fetchCandles(apiSym(state.symbol), state.ribbonG, 2);
     if (req !== ribbonReq) return; // superseded by a newer request
@@ -731,8 +778,10 @@ async function initRibbon() {
     // Re-fit after the fetch: an overlapping refresh may have drawn since.
     const f = fitCanvas(canvas);
     drawRibbon(f.ctx, f.w, f.h, candles.slice(-240));
+    ribbonDrawn = true;
   } catch (err) {
     if (req !== ribbonReq) return; // superseded by a newer request
+    if (ribbonDrawn) return; // keep the last good chart on transient errors
     const f = fitCanvas(canvas);
     f.ctx.fillStyle = '#8b98ab'; f.ctx.font = '13px sans-serif';
     f.ctx.fillText('Could not load EMA data.', 20, 40);
@@ -920,7 +969,10 @@ function renderPaperForm() {
 function markPositions() { // light refresh of live P&L numbers on price ticks
   if ($('app').hidden) return;
   checkPaperTriggers(); // auto-close on TP / SL / liquidation
-  renderPaper();
+  // With no positions or history the panel is static — rebuilding its DOM
+  // every 10s is pure jank. (checkPaperTriggers ran first, so a fresh
+  // auto-close still renders via the history it just wrote.)
+  if (paper.positions.length || paper.history.length) renderPaper();
 }
 /** Close positions whose take-profit, stop-loss, or liquidation level was hit. */
 function checkPaperTriggers() {
@@ -1011,12 +1063,13 @@ function closePosition(id, reason) {
 /* ---------- 10. News feed ---------- */
 async function refreshNews() {
   const el = $('news-list');
-  el.innerHTML = '<div class="empty-state">Loading news…</div>';
+  loadingOnce(el, '<div class="empty-state">Loading news…</div>');
   try {
     const data = await fetchJson('/api/news');
     const items = data.items || [];
     $('news-updated').textContent = data.updatedAt ? 'Updated ' + timeAgo(msOf(data.updatedAt)) : '';
     el.innerHTML = '';
+    markLoaded(el);
     if (!items.length) { el.innerHTML = '<div class="empty-state">No news items right now.</div>'; return; }
     items.forEach((n) => {
       const d = document.createElement('div');
@@ -1030,7 +1083,7 @@ async function refreshNews() {
       el.appendChild(d);
     });
   } catch (err) {
-    el.innerHTML = '<div class="empty-state">Could not load news. Check your connection and try again.</div>';
+    loadingOnce(el, '<div class="empty-state">Could not load news. Check your connection and try again.</div>');
   }
 }
 
