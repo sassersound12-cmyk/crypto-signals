@@ -417,7 +417,10 @@ function drawPatternChart(ctx, w, h, candles, patterns) {
     });
     ctx.fillStyle = '#ffb300';
     ctx.font = 'bold 12px sans-serif';
-    ctx.fillText(p.label || p.name || ('pattern ' + (pi + 1)), x0 + 6, PC.top + 18);
+    // Stagger labels vertically: overlapping patterns (e.g. Rising Wedge +
+    // Head and Shoulders on the same window) drew at the identical y and
+    // collided into unreadable text.
+    ctx.fillText(p.label || p.name || ('pattern ' + (pi + 1)), x0 + 6, PC.top + 18 + pi * 16);
     ctx.restore();
   });
 }
@@ -999,6 +1002,7 @@ function closePosition(id, reason) {
   const pnl = positionPnl(p);
   paper.cash += val;
   paper.history.unshift({ ...p, exit: px, closedAt: Date.now(), pnl, reason: reason || 'Manual' });
+  if (paper.history.length > 200) paper.history.length = 200; // cap: localStorage hygiene
   paper.positions.splice(i, 1);
   savePaper(paper);
   renderPaper();
@@ -1187,10 +1191,17 @@ function bootApp() {
   });
   setInterval(() => { refreshPrices(); }, REFRESH_MS);       // 10s price auto-refresh
   setInterval(() => { refreshSignals(); refreshNews(); }, 120000); // slower cycle for signals/news
+  // Debounced: on mobile the address bar showing/hiding fires resize in
+  // bursts; without this each burst re-fetched pattern + ribbon candles
+  // and flashed "Loading…" over the charts.
+  let resizeT = null;
   window.addEventListener('resize', () => {
-    refreshPatterns();
-    if (rb.candles.length) drawRainbow();
-    initRibbon();
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => {
+      refreshPatterns();
+      if (rb.candles.length) drawRainbow();
+      initRibbon();
+    }, 300);
   });
 }
 
