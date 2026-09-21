@@ -492,9 +492,10 @@ function voicePumpSeq() {
     if (!buf) return;
     const src = voiceCtx.createBufferSource();
     src.buffer = buf;
+    src.playbackRate.value = 1.12; // brisker pace
     src.connect(voiceMaster);
     src.start(t);
-    t += buf.duration + 0.045; // tight word gap, phrase clips carry their own pauses
+    t += buf.duration / 1.12 + 0.02; // tight word gap; clips are silence-trimmed
   });
   const ms = Math.max(300, (t - voiceCtx.currentTime) * 1000);
   setTimeout(() => { voicePlaying = false; if (voiceOn) voicePumpSeq(); }, ms + 150);
