@@ -262,6 +262,8 @@ async function refreshSignals() {
     renderRsi(data.rsi);
     renderLevels(data);
     renderSignalCards(data.signals);
+    voiceCheckSignals(data);
+    voiceCheckLevels(data);
   } catch (err) {
     if (req !== signalsReq) return; // superseded by a newer request
     loadingOnce(list, '<div class="empty-state">Could not load signals. Check your connection and try again.</div>');
@@ -326,7 +328,117 @@ function renderSignalCards(signals) {
   });
 }
 
-/* ---------- candle fetching (with history stitching) ---------- */
+/* ---------- 4b. Voice assistant (spoken alerts, FRIDAY-style) ----------
+   Uses the device's built-in speech engine (free, no backend). Speaks only
+   when something NEW happens for the selected coin: a fresh BUY/SELL
+   signal, a newly detected pattern, or a support/resistance break. State
+   is tracked on every refresh so enabling mid-session never reads stale
+   news, and nothing repeats while unchanged. */
+const LS_VOICE = 'cs_voice_on';
+let voiceOn = false;
+let voiceQueue = [];
+let voiceBusy = false;
+let voiceLast = { sig: null, pat: null, zone: null };
+
+function pickBritishMaleVoice() {
+  try {
+    const vs = speechSynthesis.getVoices();
+    if (!vs.length) return null;
+    const gb = vs.filter((v) => (v.lang || '').toLowerCase().indexOf('en-gb') === 0);
+    const pool = gb.length ? gb : vs.filter((v) => (v.lang || '').toLowerCase().indexOf('en') === 0);
+    const src = pool.length ? pool : vs;
+    const hints = ['daniel', 'george', 'james', 'arthur', 'brian', 'david', 'oliver',
+      'harry', 'fred', 'thomas', 'william', 'charlie', 'ryan', 'male'];
+    return src.find((v) => hints.some((h) => (v.name || '').toLowerCase().indexOf(h) !== -1)) || src[0];
+  } catch (e) { return null; }
+}
+function speak(text) {
+  if (!voiceOn || !('speechSynthesis' in window)) return;
+  voiceQueue.push(text);
+  pumpVoice();
+}
+function pumpVoice() {
+  if (voiceBusy || !voiceQueue.length) return;
+  let u;
+  try { u = new SpeechSynthesisUtterance(voiceQueue.shift()); }
+  catch (e) { voiceQueue.length = 0; return; }
+  const v = pickBritishMaleVoice();
+  if (v) u.voice = v;
+  u.rate = 1.03; u.pitch = 0.85; u.volume = 1;
+  voiceBusy = true;
+  const done = () => { voiceBusy = false; setTimeout(pumpVoice, 350); };
+  u.onend = done; u.onerror = done;
+  try { speechSynthesis.speak(u); } catch (e) { done(); }
+}
+function voiceCoinName(s) { const m = COIN_META[s]; return (m && m.name) || s; }
+function granSpoken(g) {
+  const map = { 1800: '30 minute', 3600: '1 hour', 43200: '12 hour', 86400: 'daily', 604800: 'weekly', 2592000: '30 day' };
+  return map[g] || '';
+}
+// Fresh BUY/SELL signal for the selected coin.
+function voiceCheckSignals(data) {
+  const coin = state.symbol;
+  const sigs = (data && data.signals) || [];
+  const key = coin + ':' + (sigs.length ? sigs[0].type + '|' + sigs[0].price + '|' + sigs[0].time : 'none');
+  const changed = voiceLast.sig !== null && voiceLast.sig !== key;
+  voiceLast.sig = key;
+  if (!changed || !voiceOn || !sigs.length) return;
+  const type = String(sigs[0].type || '').toUpperCase() === 'SELL' ? 'Sell' : 'Buy';
+  speak('New ' + type + ' signal on ' + voiceCoinName(coin) + ' at ' + fmtPrice(sigs[0].price) + '.');
+}
+// Newly detected pattern for the selected coin.
+function voiceCheckPatterns(patterns) {
+  const coin = state.symbol;
+  const names = (patterns || []).map((p) => p.name || p.label || 'pattern');
+  const key = coin + ':' + state.patternG + ':' + names.join('|');
+  const changed = voiceLast.pat !== null && voiceLast.pat !== key;
+  voiceLast.pat = key;
+  if (!changed || !voiceOn || !names.length) return;
+  const g = granSpoken(state.patternG);
+  speak(names[0] + ' forming on ' + voiceCoinName(coin) + (g ? ', ' + g + ' chart.' : '.'));
+}
+// Support/resistance break transitions for the selected coin.
+function voiceCheckLevels(data) {
+  if (!data || !isFinite(data.price)) return;
+  const coin = state.symbol;
+  const zone = (data.resistance && data.price > data.resistance) ? 'above'
+    : (data.support && data.price < data.support) ? 'below' : 'inside';
+  const key = coin + ':' + zone;
+  const changed = voiceLast.zone !== null && voiceLast.zone !== key;
+  voiceLast.zone = key;
+  if (!changed || !voiceOn || zone === 'inside') return;
+  if (zone === 'above') speak(voiceCoinName(coin) + ' broke above resistance at ' + fmtPrice(data.resistance) + '.');
+  else speak(voiceCoinName(coin) + ' broke below support at ' + fmtPrice(data.support) + '.');
+}
+function initVoice() {
+  const btn = $('voice-btn');
+  if (!btn) return;
+  const supported = 'speechSynthesis' in window;
+  voiceOn = supported && localStorage.getItem(LS_VOICE) === '1';
+  const paint = () => {
+    btn.textContent = voiceOn ? '🔊 Voice' : '🔇 Voice';
+    btn.setAttribute('aria-pressed', String(voiceOn));
+    btn.classList.toggle('on', voiceOn);
+  };
+  paint();
+  if (!supported) { btn.disabled = true; btn.title = 'Voice not supported on this device'; return; }
+  try { // voice list loads async on some platforms; warm it up early
+    speechSynthesis.getVoices();
+    speechSynthesis.onvoiceschanged = () => { try { speechSynthesis.getVoices(); } catch (e) {} };
+  } catch (e) {}
+  btn.addEventListener('click', () => {
+    voiceOn = !voiceOn;
+    try { localStorage.setItem(LS_VOICE, voiceOn ? '1' : '0'); } catch (e) {}
+    if (!voiceOn) {
+      try { speechSynthesis.cancel(); } catch (e) {}
+      voiceQueue.length = 0; voiceBusy = false;
+    }
+    paint();
+    if (voiceOn) speak('Voice alerts online.');
+  });
+}
+
+/* ---------- Candle fetching (with history stitching) ---------- */
 async function fetchCandles(symbol, granularity, maxChunks, chunkLimit) {
   maxChunks = maxChunks || 1;
   chunkLimit = Math.min(Math.max(chunkLimit || 200, 1), 1000); // server clamps limit to 1..1000
@@ -386,6 +498,7 @@ async function refreshPatterns() {
     drawPatternChart(f.ctx, f.w, f.h, candles, pat.patterns || []);
     if (candles.length) patternDrawn = true;
     renderPatternCards(pat.patterns || [], pat.note);
+    voiceCheckPatterns(pat.patterns || []);
   } catch (err) {
     if (req !== patternReq) return; // superseded by a newer request
     if (patternDrawn) return; // keep the last good chart on transient errors
@@ -1239,6 +1352,7 @@ function bootApp() {
   initRibbon();
   refreshNews();
   initPaper();
+  initVoice();
   $('refresh-btn').addEventListener('click', () => {
     refreshPrices(); refreshSignals(); refreshPatterns(); refreshRibbon(); refreshNews();
   });
