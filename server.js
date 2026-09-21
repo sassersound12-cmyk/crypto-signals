@@ -182,7 +182,7 @@ app.get("/api/signals", async (req, res) => {
       change24hPct: info.change24hPct,
       candles: candleData.candles,
       granularity: 3600,
-      patterns: detectPatterns(candleData.candles),
+      patterns: detectPatterns(candleData.candles, 3600),
       newsItems: newsData.items,
       allPrices: priceData.prices,
     });
@@ -211,7 +211,7 @@ app.get("/api/patterns", async (req, res) => {
 
   try {
     const candleData = await getCandles(symbol, granularity, 200);
-    const patterns = detectPatterns(candleData.candles);
+    const patterns = detectPatterns(candleData.candles, granularity);
     const payload = {
       symbol,
       granularity,
