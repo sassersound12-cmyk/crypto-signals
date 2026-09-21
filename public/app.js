@@ -353,13 +353,29 @@ const VOICE_COIN_SLUG = {
   DOGE: 'coin-dogecoin', ADA: 'coin-cardano', LINK: 'coin-chainlink', FLR: 'coin-flare',
   XLM: 'coin-stellar', HBAR: 'coin-hedera', SHX: 'coin-stronghold',
 };
-const VOICE_PAT_SLUG = {
-  'Ascending Triangle': 'pat-ascending-triangle', 'Bear Pennant': 'pat-bear-pennant',
-  'Bull Pennant': 'pat-bull-pennant', 'Descending Triangle': 'pat-descending-triangle',
-  'Double Bottom': 'pat-double-bottom', 'Double Top': 'pat-double-top',
-  'Falling Wedge': 'pat-falling-wedge', 'Head and Shoulders': 'pat-head-and-shoulders',
-  'Inverse Head and Shoulders': 'pat-inverse-head-and-shoulders', 'Rectangle': 'pat-rectangle',
-  'Rising Wedge': 'pat-rising-wedge', 'Symmetrical Triangle': 'pat-symmetrical-triangle',
+// Fluent pre-rendered phrase clips (one natural phrase per clip, so only the
+// price itself is stitched word-by-word).
+const COINS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'LINK', 'FLR', 'XLM', 'HBAR', 'SHX'];
+const COIN_SHORT = { BTC: 'btc', ETH: 'eth', SOL: 'sol', XRP: 'xrp', DOGE: 'doge', ADA: 'ada', LINK: 'link', FLR: 'flr', XLM: 'xlm', HBAR: 'hbar', SHX: 'shx' };
+const VOICE_BUY_SLUG = {}, VOICE_SELL_SLUG = {}, VOICE_ABOVE_SLUG = {}, VOICE_BELOW_SLUG = {};
+COINS.forEach((c) => {
+  const s = COIN_SHORT[c];
+  VOICE_BUY_SLUG[c] = 'buy-' + s;
+  VOICE_SELL_SLUG[c] = 'sell-' + s;
+  VOICE_ABOVE_SLUG[c] = 'above-' + s;
+  VOICE_BELOW_SLUG[c] = 'below-' + s;
+});
+const VOICE_PATF_SLUG = {
+  'Ascending Triangle': 'patf-ascending-triangle', 'Bear Pennant': 'patf-bear-pennant',
+  'Bull Pennant': 'patf-bull-pennant', 'Descending Triangle': 'patf-descending-triangle',
+  'Double Bottom': 'patf-double-bottom', 'Double Top': 'patf-double-top',
+  'Falling Wedge': 'patf-falling-wedge', 'Head and Shoulders': 'patf-head-and-shoulders',
+  'Inverse Head and Shoulders': 'patf-inverse-head-and-shoulders', 'Rectangle': 'patf-rectangle',
+  'Rising Wedge': 'patf-rising-wedge', 'Symmetrical Triangle': 'patf-symmetrical-triangle',
+};
+const VOICE_TF_SLUG = {
+  1800: 't-1800', 3600: 't-3600', 43200: 't-43200',
+  86400: 't-86400', 604800: 't-604800', 2592000: 't-2592000',
 };
 // Integer -> clip slugs, British style ("one hundred and twenty").
 function numWords(n) {
@@ -418,17 +434,7 @@ function priceWords(p) {
   out.push(ci === 1 && !frac ? 'n-cent' : 'n-cents');
   return out;
 }
-function granSlugs(g) {
-  switch (g) {
-    case 1800: return ['n-30', 'w-minute', 'w-chart'];
-    case 3600: return ['n-1', 'w-hour', 'w-chart'];
-    case 43200: return ['n-12', 'w-hour', 'w-chart'];
-    case 86400: return ['w-daily', 'w-chart'];
-    case 604800: return ['w-weekly', 'w-chart'];
-    case 2592000: return ['n-30', 'w-day', 'w-chart'];
-    default: return [];
-  }
-}
+function tfSlug(g) { return VOICE_TF_SLUG[g] || null; }
 function voiceLoad() {
   if (voiceLoadPromise) return voiceLoadPromise;
   voiceLoadPromise = (async () => {
@@ -438,15 +444,19 @@ function voiceLoad() {
     voiceMaster = voiceCtx.createGain();
     voiceMaster.connect(voiceCtx.destination);
     const slugs = new Set([
-      'ph-new-buy', 'ph-new-sell', 'ph-forming-on', 'ph-broke-above', 'ph-broke-below',
-      'ph-online', 'w-at', 'w-chart', 'w-minute', 'w-hour', 'w-day', 'w-daily', 'w-weekly',
+      'ph-online',
       'n-hundred', 'n-thousand', 'n-million', 'n-and',
       'n-dollar', 'n-dollars', 'n-cent', 'n-cents', 'n-point',
     ]);
     for (let i = 0; i < 20; i++) slugs.add('n-' + i);
     for (let t = 20; t <= 90; t += 10) slugs.add('n-' + t);
     Object.values(VOICE_COIN_SLUG).forEach((s) => slugs.add(s));
-    Object.values(VOICE_PAT_SLUG).forEach((s) => slugs.add(s));
+    Object.values(VOICE_BUY_SLUG).forEach((s) => slugs.add(s));
+    Object.values(VOICE_SELL_SLUG).forEach((s) => slugs.add(s));
+    Object.values(VOICE_ABOVE_SLUG).forEach((s) => slugs.add(s));
+    Object.values(VOICE_BELOW_SLUG).forEach((s) => slugs.add(s));
+    Object.values(VOICE_PATF_SLUG).forEach((s) => slugs.add(s));
+    Object.values(VOICE_TF_SLUG).forEach((s) => slugs.add(s));
     await Promise.all([...slugs].map(async (s) => {
       const res = await fetch(VOICE_BASE + s + '.mp3');
       if (!res.ok) throw new Error('missing clip ' + s);
@@ -521,13 +531,13 @@ function voiceCheckSignals(data) {
   if (!changed || !voiceOn || !sigs.length) return;
   const s0 = sigs[0];
   const isSell = String(s0.type || '').toUpperCase() === 'SELL';
-  const coinSlug = VOICE_COIN_SLUG[coin];
   // Announce the LIVE chart price (data.price), not the signal's older
   // trigger price, so the spoken number always matches the chart on screen.
   const livePrice = isFinite(Number(data.price)) ? Number(data.price) : Number(s0.price);
-  if (coinSlug) {
+  const phraseSlug = (isSell ? VOICE_SELL_SLUG : VOICE_BUY_SLUG)[coin];
+  if (phraseSlug) {
     voiceAlert(
-      [(isSell ? 'ph-new-sell' : 'ph-new-buy'), coinSlug, 'w-at'].concat(priceWords(livePrice)),
+      [phraseSlug].concat(priceWords(livePrice)),
       'New ' + (isSell ? 'Sell' : 'Buy') + ' signal on ' + voiceCoinName(coin) + ' at ' + fmtPrice(livePrice) + '.'
     );
   }
@@ -540,11 +550,14 @@ function voiceCheckPatterns(patterns) {
   const changed = voiceLast.pat !== null && voiceLast.pat !== key;
   voiceLast.pat = key;
   if (!changed || !voiceOn || !names.length) return;
-  const patSlug = VOICE_PAT_SLUG[names[0]];
+  const patSlug = VOICE_PATF_SLUG[names[0]];
   const coinSlug = VOICE_COIN_SLUG[coin];
+  const tSlug = tfSlug(state.patternG);
   if (patSlug && coinSlug) {
+    const seq = [patSlug, coinSlug];
+    if (tSlug) seq.push(tSlug);
     voiceAlert(
-      [patSlug, 'ph-forming-on', coinSlug].concat(granSlugs(state.patternG)),
+      seq,
       names[0] + ' forming on ' + voiceCoinName(coin) + ', ' + granSpoken(state.patternG) + ' chart.'
     );
   } else {
@@ -564,13 +577,15 @@ function voiceCheckLevels(data) {
   const coinSlug = VOICE_COIN_SLUG[coin];
   if (!coinSlug) return;
   if (zone === 'above') {
-    voiceAlert(
-      [coinSlug, 'ph-broke-above'].concat(priceWords(data.resistance)),
+    const phraseSlug = VOICE_ABOVE_SLUG[coin];
+    if (phraseSlug) voiceAlert(
+      [phraseSlug].concat(priceWords(data.resistance)),
       voiceCoinName(coin) + ' broke above resistance at ' + fmtPrice(data.resistance) + '.'
     );
   } else {
-    voiceAlert(
-      [coinSlug, 'ph-broke-below'].concat(priceWords(data.support)),
+    const phraseSlug = VOICE_BELOW_SLUG[coin];
+    if (phraseSlug) voiceAlert(
+      [phraseSlug].concat(priceWords(data.support)),
       voiceCoinName(coin) + ' broke below support at ' + fmtPrice(data.support) + '.'
     );
   }
