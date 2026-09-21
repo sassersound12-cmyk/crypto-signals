@@ -522,10 +522,13 @@ function voiceCheckSignals(data) {
   const s0 = sigs[0];
   const isSell = String(s0.type || '').toUpperCase() === 'SELL';
   const coinSlug = VOICE_COIN_SLUG[coin];
+  // Announce the LIVE chart price (data.price), not the signal's older
+  // trigger price, so the spoken number always matches the chart on screen.
+  const livePrice = isFinite(Number(data.price)) ? Number(data.price) : Number(s0.price);
   if (coinSlug) {
     voiceAlert(
-      [(isSell ? 'ph-new-sell' : 'ph-new-buy'), coinSlug, 'w-at'].concat(priceWords(s0.price)),
-      'New ' + (isSell ? 'Sell' : 'Buy') + ' signal on ' + voiceCoinName(coin) + ' at ' + fmtPrice(s0.price) + '.'
+      [(isSell ? 'ph-new-sell' : 'ph-new-buy'), coinSlug, 'w-at'].concat(priceWords(livePrice)),
+      'New ' + (isSell ? 'Sell' : 'Buy') + ' signal on ' + voiceCoinName(coin) + ' at ' + fmtPrice(livePrice) + '.'
     );
   }
 }
