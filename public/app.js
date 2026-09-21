@@ -443,7 +443,8 @@ function voiceLoad() {
       'n-hundred', 'n-thousand', 'n-million', 'n-and',
       'n-dollar', 'n-dollars', 'n-cent', 'n-cents', 'n-point',
     ]);
-    for (let i = 0; i < 100; i++) slugs.add('n-' + i);
+    for (let i = 0; i < 20; i++) slugs.add('n-' + i);
+    for (let t = 20; t <= 90; t += 10) slugs.add('n-' + t);
     Object.values(VOICE_COIN_SLUG).forEach((s) => slugs.add(s));
     Object.values(VOICE_PAT_SLUG).forEach((s) => slugs.add(s));
     await Promise.all([...slugs].map(async (s) => {
