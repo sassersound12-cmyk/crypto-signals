@@ -109,7 +109,11 @@ function esc(s) { // minimal HTML escape for interpolated strings
 
 /* Crisp canvas: scale backing store by devicePixelRatio, return {ctx,w,h} in CSS px. */
 function fitCanvas(canvas) {
-  const hCss = parseInt(canvas.getAttribute('height') || '320', 10);
+  // Remember the intended CSS height once: canvas.height is overwritten
+  // below with device pixels, so re-reading the attribute on later calls
+  // would double the box height on every redraw (runaway growth).
+  if (!canvas.dataset.cssH) canvas.dataset.cssH = parseInt(canvas.getAttribute('height') || '320', 10);
+  const hCss = parseInt(canvas.dataset.cssH, 10) || 320;
   canvas.style.height = hCss + 'px';
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const w = Math.max(50, canvas.clientWidth);
