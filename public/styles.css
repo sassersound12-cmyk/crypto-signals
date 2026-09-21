@@ -65,6 +65,7 @@ a { color: var(--green); }
 .btn-primary:hover { filter: brightness(1.08); }
 .btn-ghost { background: transparent; }
 .btn-ghost:hover { border-color: var(--green); }
+.btn-ghost.on { border-color: var(--green); color: var(--green); }
 .btn-sm { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
 
 /* ---------- layout ---------- */
