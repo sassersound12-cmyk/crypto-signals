@@ -328,47 +328,181 @@ function renderSignalCards(signals) {
   });
 }
 
-/* ---------- 4b. Voice assistant (spoken alerts, FRIDAY-style) ----------
-   Uses the device's built-in speech engine (free, no backend). Speaks only
-   when something NEW happens for the selected coin: a fresh BUY/SELL
-   signal, a newly detected pattern, or a support/resistance break. State
-   is tracked on every refresh so enabling mid-session never reads stale
-   news, and nothing repeats while unchanged. */
+/* ---------- 4b. Voice assistant (human phrasebook voice) ----------
+   Pre-generated human voice clips (public/voice/*.mp3) stitched gaplessly
+   with Web Audio. Speaks only when something NEW happens for the selected
+   coin: a fresh BUY/SELL signal, a newly detected pattern, or a
+   support/resistance break. State is tracked on every refresh so enabling
+   mid-session never reads stale news, and nothing repeats while unchanged.
+   Falls back to the device's speech engine if the phrasebook can't load. */
 const LS_VOICE = 'cs_voice_on';
+const VOICE_BASE = 'voice/';
 let voiceOn = false;
-let voiceQueue = [];
-let voiceBusy = false;
+let voiceCtx = null;
+let voiceMaster = null;
+let voiceBuffers = {};   // slug -> AudioBuffer
+let voiceReady = false;
+let voiceLoadPromise = null;
+let voiceUseTTS = false; // fallback flag
+let voiceSeqQueue = [];  // queued slug-arrays
+let voicePlaying = false;
 let voiceLast = { sig: null, pat: null, zone: null };
 
-function pickBritishMaleVoice() {
-  try {
-    const vs = speechSynthesis.getVoices();
-    if (!vs.length) return null;
-    const gb = vs.filter((v) => (v.lang || '').toLowerCase().indexOf('en-gb') === 0);
-    const pool = gb.length ? gb : vs.filter((v) => (v.lang || '').toLowerCase().indexOf('en') === 0);
-    const src = pool.length ? pool : vs;
-    const hints = ['daniel', 'george', 'james', 'arthur', 'brian', 'david', 'oliver',
-      'harry', 'fred', 'thomas', 'william', 'charlie', 'ryan', 'male'];
-    return src.find((v) => hints.some((h) => (v.name || '').toLowerCase().indexOf(h) !== -1)) || src[0];
-  } catch (e) { return null; }
+const VOICE_COIN_SLUG = {
+  BTC: 'coin-bitcoin', ETH: 'coin-ethereum', SOL: 'coin-solana', XRP: 'coin-xrp',
+  DOGE: 'coin-dogecoin', ADA: 'coin-cardano', LINK: 'coin-chainlink', FLR: 'coin-flare',
+  XLM: 'coin-stellar', HBAR: 'coin-hedera', SHX: 'coin-stronghold',
+};
+const VOICE_PAT_SLUG = {
+  'Ascending Triangle': 'pat-ascending-triangle', 'Bear Pennant': 'pat-bear-pennant',
+  'Bull Pennant': 'pat-bull-pennant', 'Descending Triangle': 'pat-descending-triangle',
+  'Double Bottom': 'pat-double-bottom', 'Double Top': 'pat-double-top',
+  'Falling Wedge': 'pat-falling-wedge', 'Head and Shoulders': 'pat-head-and-shoulders',
+  'Inverse Head and Shoulders': 'pat-inverse-head-and-shoulders', 'Rectangle': 'pat-rectangle',
+  'Rising Wedge': 'pat-rising-wedge', 'Symmetrical Triangle': 'pat-symmetrical-triangle',
+};
+// Integer -> clip slugs, British style ("one hundred and twenty").
+function numWords(n) {
+  n = Math.floor(Math.abs(n));
+  const out = [];
+  const under1000 = (x) => {
+    const a = [];
+    if (x >= 100) {
+      a.push('n-' + Math.floor(x / 100), 'n-hundred');
+      x %= 100;
+      if (x) a.push('n-and');
+    }
+    if (x >= 20) {
+      const t = Math.floor(x / 10) * 10, u = x % 10;
+      a.push('n-' + t);
+      if (u) a.push('n-' + u);
+    } else if (x > 0 || !a.length) {
+      a.push('n-' + x);
+    }
+    return a;
+  };
+  if (n >= 1000000) {
+    const m = Math.floor(n / 1000000), r = n % 1000000;
+    out.push.apply(out, under1000(m).concat(['n-million']));
+    if (r) { if (r < 100) out.push('n-and'); out.push.apply(out, numWords(r)); }
+    return out;
+  }
+  if (n >= 1000) {
+    const t = Math.floor(n / 1000), r = n % 1000;
+    out.push.apply(out, under1000(t).concat(['n-thousand']));
+    if (r) { if (r < 100) out.push('n-and'); out.push.apply(out, under1000(r)); }
+    return out;
+  }
+  return under1000(n);
 }
-function speak(text) {
-  if (!voiceOn || !('speechSynthesis' in window)) return;
-  voiceQueue.push(text);
-  pumpVoice();
+// Price -> clip slugs. >= $1: dollars and cents; sub-dollar: spoken in cents
+// ("forty-two point five five cents"), the way traders say it.
+function priceWords(p) {
+  p = Number(p);
+  if (!isFinite(p) || p < 0) return [];
+  if (p >= 1) {
+    let d = Math.floor(p), c = Math.round((p - d) * 100);
+    if (c === 100) { d += 1; c = 0; }
+    const out = numWords(d).concat([d === 1 ? 'n-dollar' : 'n-dollars']);
+    if (c > 0) out.push('n-and'), out.push.apply(out, numWords(c)), out.push(c === 1 ? 'n-cent' : 'n-cents');
+    return out;
+  }
+  const cents = Math.round(p * 10000) / 100;
+  const ci = Math.floor(cents);
+  let frac = String(Math.round((cents - ci) * 100)).padStart(2, '0').replace(/0$/, '');
+  const out = numWords(ci);
+  if (frac) {
+    out.push('n-point');
+    for (const ch of frac) out.push('n-' + ch);
+  }
+  out.push(ci === 1 && !frac ? 'n-cent' : 'n-cents');
+  return out;
 }
-function pumpVoice() {
-  if (voiceBusy || !voiceQueue.length) return;
-  let u;
-  try { u = new SpeechSynthesisUtterance(voiceQueue.shift()); }
-  catch (e) { voiceQueue.length = 0; return; }
-  const v = pickBritishMaleVoice();
-  if (v) u.voice = v;
-  u.rate = 1.03; u.pitch = 0.85; u.volume = 1;
-  voiceBusy = true;
-  const done = () => { voiceBusy = false; setTimeout(pumpVoice, 350); };
-  u.onend = done; u.onerror = done;
-  try { speechSynthesis.speak(u); } catch (e) { done(); }
+function granSlugs(g) {
+  switch (g) {
+    case 1800: return ['n-30', 'w-minute', 'w-chart'];
+    case 3600: return ['n-1', 'w-hour', 'w-chart'];
+    case 43200: return ['n-12', 'w-hour', 'w-chart'];
+    case 86400: return ['w-daily', 'w-chart'];
+    case 604800: return ['w-weekly', 'w-chart'];
+    case 2592000: return ['n-30', 'w-day', 'w-chart'];
+    default: return [];
+  }
+}
+function voiceLoad() {
+  if (voiceLoadPromise) return voiceLoadPromise;
+  voiceLoadPromise = (async () => {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) throw new Error('no webaudio');
+    voiceCtx = new AC();
+    voiceMaster = voiceCtx.createGain();
+    voiceMaster.connect(voiceCtx.destination);
+    const slugs = new Set([
+      'ph-new-buy', 'ph-new-sell', 'ph-forming-on', 'ph-broke-above', 'ph-broke-below',
+      'ph-online', 'w-at', 'w-chart', 'w-minute', 'w-hour', 'w-day', 'w-daily', 'w-weekly',
+      'n-hundred', 'n-thousand', 'n-million', 'n-and',
+      'n-dollar', 'n-dollars', 'n-cent', 'n-cents', 'n-point',
+    ]);
+    for (let i = 0; i < 100; i++) slugs.add('n-' + i);
+    Object.values(VOICE_COIN_SLUG).forEach((s) => slugs.add(s));
+    Object.values(VOICE_PAT_SLUG).forEach((s) => slugs.add(s));
+    await Promise.all([...slugs].map(async (s) => {
+      const res = await fetch(VOICE_BASE + s + '.mp3');
+      if (!res.ok) throw new Error('missing clip ' + s);
+      voiceBuffers[s] = await voiceCtx.decodeAudioData(await res.arrayBuffer());
+    }));
+    voiceReady = true;
+    return true;
+  })().catch(() => { voiceUseTTS = true; return false; });
+  return voiceLoadPromise;
+}
+// Device speech fallback (only if the phrasebook fails to load).
+let ttsBusy = false;
+const ttsQueue = [];
+function ttsSay(text) {
+  if (!('speechSynthesis' in window)) return;
+  ttsQueue.push(text);
+  const pump = () => {
+    if (ttsBusy || !ttsQueue.length) return;
+    ttsBusy = true;
+    const u = new SpeechSynthesisUtterance(ttsQueue.shift());
+    u.rate = 1.02; u.pitch = 0.9;
+    const done = () => { ttsBusy = false; setTimeout(pump, 300); };
+    u.onend = done; u.onerror = done;
+    try { speechSynthesis.speak(u); } catch (e) { done(); }
+  };
+  pump();
+}
+function voiceEnqueue(slugs) {
+  voiceSeqQueue.push(slugs);
+  voicePumpSeq();
+}
+function voicePumpSeq() {
+  if (voicePlaying || !voiceSeqQueue.length || !voiceOn) return;
+  if (!voiceReady) {
+    voiceLoad().then((ok) => { if (ok && voiceOn) voicePumpSeq(); });
+    return;
+  }
+  voicePlaying = true;
+  const seq = voiceSeqQueue.shift();
+  let t = voiceCtx.currentTime + 0.06;
+  seq.forEach((s) => {
+    const buf = voiceBuffers[s];
+    if (!buf) return;
+    const src = voiceCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(voiceMaster);
+    src.start(t);
+    t += buf.duration + 0.045; // tight word gap, phrase clips carry their own pauses
+  });
+  const ms = Math.max(300, (t - voiceCtx.currentTime) * 1000);
+  setTimeout(() => { voicePlaying = false; if (voiceOn) voicePumpSeq(); }, ms + 150);
+}
+// One alert = clip sequence (human voice) + plain text (TTS fallback).
+function voiceAlert(slugs, text) {
+  if (!voiceOn) return;
+  if (voiceUseTTS) { ttsSay(text); return; }
+  voiceEnqueue(slugs);
 }
 function voiceCoinName(s) { const m = COIN_META[s]; return (m && m.name) || s; }
 function granSpoken(g) {
@@ -383,8 +517,15 @@ function voiceCheckSignals(data) {
   const changed = voiceLast.sig !== null && voiceLast.sig !== key;
   voiceLast.sig = key;
   if (!changed || !voiceOn || !sigs.length) return;
-  const type = String(sigs[0].type || '').toUpperCase() === 'SELL' ? 'Sell' : 'Buy';
-  speak('New ' + type + ' signal on ' + voiceCoinName(coin) + ' at ' + fmtPrice(sigs[0].price) + '.');
+  const s0 = sigs[0];
+  const isSell = String(s0.type || '').toUpperCase() === 'SELL';
+  const coinSlug = VOICE_COIN_SLUG[coin];
+  if (coinSlug) {
+    voiceAlert(
+      [(isSell ? 'ph-new-sell' : 'ph-new-buy'), coinSlug, 'w-at'].concat(priceWords(s0.price)),
+      'New ' + (isSell ? 'Sell' : 'Buy') + ' signal on ' + voiceCoinName(coin) + ' at ' + fmtPrice(s0.price) + '.'
+    );
+  }
 }
 // Newly detected pattern for the selected coin.
 function voiceCheckPatterns(patterns) {
@@ -394,8 +535,16 @@ function voiceCheckPatterns(patterns) {
   const changed = voiceLast.pat !== null && voiceLast.pat !== key;
   voiceLast.pat = key;
   if (!changed || !voiceOn || !names.length) return;
-  const g = granSpoken(state.patternG);
-  speak(names[0] + ' forming on ' + voiceCoinName(coin) + (g ? ', ' + g + ' chart.' : '.'));
+  const patSlug = VOICE_PAT_SLUG[names[0]];
+  const coinSlug = VOICE_COIN_SLUG[coin];
+  if (patSlug && coinSlug) {
+    voiceAlert(
+      [patSlug, 'ph-forming-on', coinSlug].concat(granSlugs(state.patternG)),
+      names[0] + ' forming on ' + voiceCoinName(coin) + ', ' + granSpoken(state.patternG) + ' chart.'
+    );
+  } else {
+    ttsSay(names[0] + ' forming on ' + voiceCoinName(coin) + '.');
+  }
 }
 // Support/resistance break transitions for the selected coin.
 function voiceCheckLevels(data) {
@@ -407,13 +556,25 @@ function voiceCheckLevels(data) {
   const changed = voiceLast.zone !== null && voiceLast.zone !== key;
   voiceLast.zone = key;
   if (!changed || !voiceOn || zone === 'inside') return;
-  if (zone === 'above') speak(voiceCoinName(coin) + ' broke above resistance at ' + fmtPrice(data.resistance) + '.');
-  else speak(voiceCoinName(coin) + ' broke below support at ' + fmtPrice(data.support) + '.');
+  const coinSlug = VOICE_COIN_SLUG[coin];
+  if (!coinSlug) return;
+  if (zone === 'above') {
+    voiceAlert(
+      [coinSlug, 'ph-broke-above'].concat(priceWords(data.resistance)),
+      voiceCoinName(coin) + ' broke above resistance at ' + fmtPrice(data.resistance) + '.'
+    );
+  } else {
+    voiceAlert(
+      [coinSlug, 'ph-broke-below'].concat(priceWords(data.support)),
+      voiceCoinName(coin) + ' broke below support at ' + fmtPrice(data.support) + '.'
+    );
+  }
 }
 function initVoice() {
   const btn = $('voice-btn');
   if (!btn) return;
-  const supported = 'speechSynthesis' in window;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const supported = !!AC || 'speechSynthesis' in window;
   voiceOn = supported && localStorage.getItem(LS_VOICE) === '1';
   const paint = () => {
     btn.textContent = voiceOn ? '🔊 Voice' : '🔇 Voice';
@@ -422,20 +583,32 @@ function initVoice() {
   };
   paint();
   if (!supported) { btn.disabled = true; btn.title = 'Voice not supported on this device'; return; }
-  try { // voice list loads async on some platforms; warm it up early
-    speechSynthesis.getVoices();
-    speechSynthesis.onvoiceschanged = () => { try { speechSynthesis.getVoices(); } catch (e) {} };
-  } catch (e) {}
   btn.addEventListener('click', () => {
     voiceOn = !voiceOn;
     try { localStorage.setItem(LS_VOICE, voiceOn ? '1' : '0'); } catch (e) {}
     if (!voiceOn) {
+      voiceSeqQueue.length = 0;
+      ttsQueue.length = 0;
       try { speechSynthesis.cancel(); } catch (e) {}
-      voiceQueue.length = 0; voiceBusy = false;
+      if (voiceMaster) { try { voiceMaster.gain.value = 0; } catch (e) {} }
+    } else if (voiceMaster) {
+      try {
+        voiceMaster.gain.value = 1;
+        if (voiceCtx && voiceCtx.state === 'suspended') voiceCtx.resume();
+      } catch (e) {}
     }
     paint();
-    if (voiceOn) speak('Voice alerts online.');
+    if (voiceOn) {
+      // User gesture: safe to start audio. Greet once the phrasebook is in.
+      voiceLoad().then((ok) => {
+        if (!voiceOn) return;
+        if (ok) voiceEnqueue(['ph-online']);
+        else ttsSay('Voice alerts online.');
+      });
+    }
   });
+  // If voice was left on, warm the phrasebook (no sound until a real event).
+  if (voiceOn) voiceLoad();
 }
 
 /* ---------- Candle fetching (with history stitching) ---------- */
