@@ -263,6 +263,7 @@ async function refreshSignals() {
     if (req !== signalsReq) return; // superseded by a newer request
     state.lastSignals = data;
     renderRegime(data.regime);
+    renderVerdict(data.verdict);
     renderRsi(data.rsi);
     renderLevels(data);
     renderSignalCards(data.signals);
@@ -278,6 +279,25 @@ function renderRegime(regime) {
   if (!regime || !regime.label) { el.innerHTML = 'Market regime: <b>unknown</b>'; return; }
   el.innerHTML = '<span class="regime-label">' + esc(regime.label) + '</span>' +
     (regime.note ? '<div class="regime-note">' + esc(regime.note) + '</div>' : '');
+}
+// One clear per-coin read: the app's own indicators rolled into a single
+// verdict, so the widgets never leave the user reconciling mixed signals.
+// When the pieces disagree the verdict says Neutral and shows both sides.
+function renderVerdict(verdict) {
+  const el = $('verdict-banner');
+  if (!verdict || !verdict.label) { el.innerHTML = '<span class="verdict-tag">Verdict</span><div class="verdict-why">Not enough data.</div>'; return; }
+  const cls = verdict.label === 'Bullish' ? 'bullish' : verdict.label === 'Bearish' ? 'bearish' : '';
+  const bull = (verdict.bullish || []).map(esc).join(' · ');
+  const bear = (verdict.bearish || []).map(esc).join(' · ');
+  let why = '';
+  if (bull && bear) why = 'For: ' + bull + '. Against: ' + bear + '.';
+  else if (bull) why = bull + '.';
+  else if (bear) why = bear + '.';
+  else why = 'No strong read from the current indicators — waiting for clarity.';
+  el.className = 'verdict-banner ' + cls;
+  el.innerHTML = '<div class="verdict-tag">' + esc(state.symbol) + ' verdict · 1h</div>' +
+    '<div class="verdict-label">' + esc(verdict.label) + '</div>' +
+    '<div class="verdict-why">' + why + '</div>';
 }
 function renderRsi(rsi) {
   const v = rsi && isFinite(rsi.value) ? rsi.value : null;
