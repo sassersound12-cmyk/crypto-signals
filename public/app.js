@@ -302,11 +302,24 @@ function renderSignalCards(signals) {
   const list = $('signal-list');
   list.innerHTML = '';
   markLoaded(list);
-  if (!signals || !signals.length) {
+  // Auto-expire: only show signals from the last 24h, so the list never
+  // becomes a long scroll of stale history. Always keep the single newest
+  // signal (marked when older than 24h) so the latest S/R event stays visible.
+  const cutoff = Date.now() - 24 * 3600 * 1000;
+  let fresh = (signals || []).filter((sg) => {
+    const t = Date.parse(sg.time);
+    return isFinite(t) && t >= cutoff;
+  });
+  let oldestKept = false;
+  if (!fresh.length && signals && signals.length) {
+    fresh = [signals[0]];
+    oldestKept = true;
+  }
+  if (!fresh.length) {
     list.innerHTML = '<div class="empty-state">No fresh signals — market is consolidating.</div>';
     return;
   }
-  signals.forEach((sg) => {
+  fresh.forEach((sg) => {
     const type = (sg.type || '').toUpperCase() === 'SELL' ? 'SELL' : 'BUY';
     const card = document.createElement('div');
     card.className = 'signal-card ' + type.toLowerCase();
@@ -322,7 +335,7 @@ function renderSignalCards(signals) {
     card.innerHTML =
       '<div class="sig-top"><span class="badge ' + type.toLowerCase() + '">' + type + '</span>' +
       '<span class="sig-price mono">' + fmtPrice(sg.price) + '</span>' +
-      '<span class="sig-time">' + esc(fmtDate(msOf(sg.time))) + '</span></div>' +
+      '<span class="sig-time">' + esc(fmtDate(msOf(sg.time))) + (oldestKept ? ' · older' : '') + '</span></div>' +
       '<div class="conf-bar"><div class="conf-fill" style="width:' + Math.min(100, Math.max(0, conf || 0)) + '%"></div></div>' +
       '<div class="conf-label mono">confidence ' + (isFinite(conf) ? fmtNum(conf, 0) + '%' : '—') +
       (sg.horizon ? ' · horizon: ' + esc(sg.horizon) : '') + '</div>' +
