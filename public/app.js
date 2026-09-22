@@ -534,6 +534,10 @@ function voiceCheckSignals(data) {
   voiceLast.sig = key;
   if (!changed || !voiceOn || !sigs.length) return;
   const s0 = sigs[0];
+  // Never announce backfilled history as "new": only a signal that fired
+  // recently counts as a fresh event worth speaking.
+  const sigMs = Date.parse(s0.time);
+  if (isFinite(sigMs) && Date.now() - sigMs > 2 * 3600 * 1000) return;
   const isSell = String(s0.type || '').toUpperCase() === 'SELL';
   // Announce the LIVE chart price (data.price), not the signal's older
   // trigger price, so the spoken number always matches the chart on screen.
