@@ -266,6 +266,7 @@ a { color: var(--green); }
 .dir-gauge .dg-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
 .dir-gauge .dg-bull { color: #00e676; font-weight: 700; font-size: 17px; }
 .dir-gauge .dg-bear { color: #ff5252; font-weight: 700; font-size: 17px; }
+.dir-gauge .dg-dim { opacity: .45; }
 .dir-gauge .dg-mid { color: var(--muted); font-size: 12px; }
 .dir-gauge .dg-track { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: #1a2333; }
 .dir-gauge .dg-fill-bull { background: #00e676; transition: width .5s ease; }
