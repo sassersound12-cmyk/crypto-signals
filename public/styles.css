@@ -261,16 +261,16 @@ a { color: var(--green); }
 .dot.green { background: var(--green); } .dot.red { background: var(--red); }
 
 .pattern-cards { display: grid; gap: 10px; margin-top: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
-/* Volume pressure gauge: buy vs sell share of volume over recent candles. */
-.vol-pressure { margin: 12px 2px 2px; }
-.vol-pressure .vp-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-.vol-pressure .vp-buy { color: #00e676; font-weight: 700; font-size: 17px; }
-.vol-pressure .vp-sell { color: #ff5252; font-weight: 700; font-size: 17px; }
-.vol-pressure .vp-mid { color: var(--muted); font-size: 12px; }
-.vol-pressure .vp-track { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: #1a2333; }
-.vol-pressure .vp-fill-buy { background: #00e676; transition: width .5s ease; }
-.vol-pressure .vp-fill-sell { background: #ff5252; transition: width .5s ease; }
-.vol-pressure .vp-cap { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-top: 4px; }
+/* Direction gauge: bullish vs bearish share of detected patterns, confidence-weighted. */
+.dir-gauge { margin: 12px 2px 2px; }
+.dir-gauge .dg-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.dir-gauge .dg-bull { color: #00e676; font-weight: 700; font-size: 17px; }
+.dir-gauge .dg-bear { color: #ff5252; font-weight: 700; font-size: 17px; }
+.dir-gauge .dg-mid { color: var(--muted); font-size: 12px; }
+.dir-gauge .dg-track { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: #1a2333; }
+.dir-gauge .dg-fill-bull { background: #00e676; transition: width .5s ease; }
+.dir-gauge .dg-fill-bear { background: #ff5252; transition: width .5s ease; }
+.dir-gauge .dg-cap { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-top: 4px; }
 .pattern-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 14px; }
 .pattern-card h3 { margin: 0 0 6px; font-size: 15px; color: var(--amber); }
 .pattern-card .pc-row { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 13px; }
