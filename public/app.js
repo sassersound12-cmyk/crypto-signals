@@ -806,7 +806,6 @@ function drawPatternChart(ctx, w, h, candles, patterns) {
     ctx.restore();
   });
 }
-function renderPatternCards(patterns, note) {
 // Direction gauge: bullish vs bearish share of the currently detected
 // patterns, weighted by each pattern's confidence. Neutral patterns
 // (e.g. Symmetrical Triangle, Rectangle) don't vote.
@@ -844,6 +843,7 @@ function renderDirectionGauge(patterns) {
     '<div class="dg-fill-bear" style="width:' + bearPct + '%"></div></div>' +
     '<div class="dg-cap"><span>Bullish</span><span>Bearish</span></div>';
 }
+function renderPatternCards(patterns, note) {
   const el = $('pattern-cards');
   el.innerHTML = '';
   if (!patterns.length) {
