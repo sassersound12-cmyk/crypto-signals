@@ -731,7 +731,7 @@ async function refreshPatterns() {
     const f = fitCanvas(canvas);
     drawPatternChart(f.ctx, f.w, f.h, candles, pat.patterns || []);
     if (candles.length) patternDrawn = true;
-    renderVolumePressure(candles);
+    renderDirectionGauge(pat.patterns || []);
     renderPatternCards(pat.patterns || [], pat.note);
     voiceCheckPatterns(pat.patterns || []);
   } catch (err) {
@@ -807,30 +807,30 @@ function drawPatternChart(ctx, w, h, candles, patterns) {
   });
 }
 function renderPatternCards(patterns, note) {
-// Volume pressure gauge: share of volume traded on up vs down candles over
-// the last 20 candles of the chart's own window. A structure break on big
-// volume swings the bar hard; drift on thin volume barely moves it.
-function renderVolumePressure(candles) {
-  const el = $('volume-pressure');
+// Direction gauge: bullish vs bearish share of the currently detected
+// patterns, weighted by each pattern's confidence. Neutral patterns
+// (e.g. Symmetrical Triangle, Rectangle) don't vote.
+function renderDirectionGauge(patterns) {
+  const el = $('direction-gauge');
   if (!el) return;
-  const win = (candles || []).slice(-20);
-  let buy = 0, sell = 0;
-  win.forEach((c) => {
-    const v = +c.volume || 0;
-    if (c.close >= c.open) buy += v; else sell += v;
+  let bull = 0, bear = 0, n = 0;
+  (patterns || []).forEach((p) => {
+    const lbl = ((p.label || '') + ' ' + (p.name || '')).toLowerCase();
+    const conf = +p.confidence || 50;
+    if (lbl.includes('bullish')) { bull += conf; n++; }
+    else if (lbl.includes('bearish')) { bear += conf; n++; }
   });
-  const tot = buy + sell;
-  if (!win.length || tot <= 0) { el.innerHTML = ''; el.style.display = 'none'; return; }
-  const buyPct = Math.round((buy / tot) * 100);
-  const sellPct = 100 - buyPct;
+  if (!n || bull + bear <= 0) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  const bullPct = Math.round((bull / (bull + bear)) * 100);
+  const bearPct = 100 - bullPct;
   el.style.display = '';
   el.innerHTML =
-    '<div class="vp-top"><span class="vp-buy">\u2191 ' + buyPct + '%</span>' +
-    '<span class="vp-mid">Last ' + win.length + ' candles \u00b7 volume-weighted</span>' +
-    '<span class="vp-sell">' + sellPct + '% \u2193</span></div>' +
-    '<div class="vp-track"><div class="vp-fill-buy" style="width:' + buyPct + '%"></div>' +
-    '<div class="vp-fill-sell" style="width:' + sellPct + '%"></div></div>' +
-    '<div class="vp-cap"><span>Buy pressure</span><span>Sell pressure</span></div>';
+    '<div class="dg-top"><span class="dg-bull">\u2191 ' + bullPct + '%</span>' +
+    '<span class="dg-mid">' + n + (n === 1 ? ' pattern' : ' patterns') + ' \u00b7 confidence-weighted</span>' +
+    '<span class="dg-bear">' + bearPct + '% \u2193</span></div>' +
+    '<div class="dg-track"><div class="dg-fill-bull" style="width:' + bullPct + '%"></div>' +
+    '<div class="dg-fill-bear" style="width:' + bearPct + '%"></div></div>' +
+    '<div class="dg-cap"><span>Bullish</span><span>Bearish</span></div>';
 }
   const el = $('pattern-cards');
   el.innerHTML = '';
