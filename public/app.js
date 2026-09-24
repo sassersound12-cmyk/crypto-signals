@@ -820,7 +820,19 @@ function renderDirectionGauge(patterns) {
     if (lbl.includes('bullish')) { bull += conf; n++; }
     else if (lbl.includes('bearish')) { bear += conf; n++; }
   });
-  if (!n || bull + bear <= 0) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  if (!n || bull + bear <= 0) {
+    // No directional read right now: show a neutral 50/50 rather than
+    // hiding, so the gauge is always visible under the chart.
+    el.style.display = '';
+    el.innerHTML =
+      '<div class="dg-top"><span class="dg-bull dg-dim">\u2191 50%</span>' +
+      '<span class="dg-mid">No directional patterns \u00b7 waiting</span>' +
+      '<span class="dg-bear dg-dim">50% \u2193</span></div>' +
+      '<div class="dg-track"><div class="dg-fill-bull" style="width:50%"></div>' +
+      '<div class="dg-fill-bear" style="width:50%"></div></div>' +
+      '<div class="dg-cap"><span>Bullish</span><span>Bearish</span></div>';
+    return;
+  }
   const bullPct = Math.round((bull / (bull + bear)) * 100);
   const bearPct = 100 - bullPct;
   el.style.display = '';
